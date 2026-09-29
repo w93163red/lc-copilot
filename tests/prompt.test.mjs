@@ -9,10 +9,11 @@ const problem = {
   lang: 'C++',
 };
 
-test('system message fixes the four headings and names the language and fence', () => {
+test('system message lets the problem decide the hint count and names the language and fence', () => {
   const [system, user] = buildMessages(problem);
   assert.equal(system.role, 'system');
-  assert.match(system.content, /## 提示 1\n## 提示 2\n## 提示 3\n## 完整代码/);
+  assert.match(system.content, /## 提示 1\n## 提示 2\n…\n## 提示 N\n## 完整代码/);
+  assert.match(system.content, /提示的层数 N 由这道题决定/);
   assert.match(system.content, /用 C\+\+ 写出可以直接提交的完整实现，放在一个 ```cpp 代码块里/);
   assert.equal(user.role, 'user');
 });
