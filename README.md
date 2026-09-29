@@ -32,3 +32,9 @@ Chrome 侧边栏扩展。打开一道 leetcode.com 题目，点击「生成提�
 ## 开发
 
 无构建步骤，纯 ES module。`npm test` 运行 `node --test`，覆盖分段、SSE 解析、提示词和设置校验。
+
+端到端验证 `scripts/e2e.mjs`：起一个本地假 OpenAI 流式服务，用 Playwright 以未打包扩展方式启动有头 Chromium，打开真实的 leetcode.com 两数之和页面，在侧边栏页面里点「生成提示」，断言四个折叠区块、代码块内容和发出的请求。需要全局安装的 `@playwright/mcp`（或用 `PLAYWRIGHT_MODULE` 指向一个 playwright 包目录）和一个 Chromium 二进制：
+
+```sh
+CHROMIUM_PATH="/path/to/Chromium" node scripts/e2e.mjs
+```
