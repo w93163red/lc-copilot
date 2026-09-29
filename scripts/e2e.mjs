@@ -98,6 +98,20 @@ assert.match(userMsg, /Two Sum/);
 assert.match(userMsg, /C\+\+/);
 assert.match(userMsg, /indices of the two numbers/);
 
+await panel.reload();
+await panel.waitForFunction(() => document.querySelector('#title')?.textContent.includes('Two Sum'), null, { timeout: 30000 });
+await panel.waitForFunction(() => document.querySelectorAll('#sections details').length === 4, null, { timeout: 30000 });
+assert.match(await panel.locator('#status').textContent(), /^已缓存 · /, 'reload shows the cached result');
+assert.equal(received.length, 1, 'cached reload sends no request');
+assert.deepEqual(await panel.$$eval('#sections details', (els) => els.map((e) => e.open)), [false, false, false, false], 'all collapsed after reload');
+
+await panel.click('#generate');
+for (let i = 0; received.length < 2; i++) {
+  assert.ok(i < 600, 'regenerate sent no request');
+  await new Promise((r) => setTimeout(r, 50));
+}
+await panel.waitForFunction(() => document.querySelector('#status').textContent.includes('完成'), null, { timeout: 30000 });
+
 await panel.screenshot({ path: path.join(OUT, 'leetcode-copilot-panel.png'), fullPage: true });
 console.log('screenshot:', path.join(OUT, 'leetcode-copilot-panel.png'));
 console.log('E2E OK. request:', JSON.stringify({ auth: received[0].auth, model: received[0].body.model, roles: received[0].body.messages.map((m) => m.role) }));
