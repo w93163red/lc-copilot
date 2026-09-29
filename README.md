@@ -26,11 +26,15 @@ Chrome 侧边栏扩展。打开一道 leetcode.com 题目，点击「生成提�
 
 生成完成的结果按题目存在 `chrome.storage.local`，再打开同一题时直接显示，状态栏标为「已缓存 · 日期」，不再请求模型；缓存的语言和编辑器当前语言不一致时会提示。点「重新生成」会重新请求并覆盖缓存。
 
+## 评估代码
+
+切到「评估」标签点「评估代码」，扩展直接读取页面编辑器里当前的代码（通过 Monaco 的模型，不用复制粘贴），连同题面发给模型，按四个维度返回：**正确性**（对不对、哪些用例会挂）、**复杂度**（时间和空间、是否已经最优）、**问题**（bug、边界、风格，每条指到具体行）、**改进建议**（具体改法，可能附一小段代码）。四个区块默认展开。评估结果只保留在内存里，不写入缓存，编辑器为空时会提示。
+
 ## 开发
 
 无构建步骤，纯 ES module。`npm test` 运行 `node --test`，覆盖分段、SSE 解析、提示词、设置校验和提示缓存。
 
-端到端验证 `scripts/e2e.mjs`：起一个本地假 OpenAI 流式服务，用 Playwright 以未打包扩展方式启动有头 Chromium，打开真实的 leetcode.com 两数之和页面，在侧边栏页面里点「生成提示」，断言四个折叠区块、代码块内容和发出的请求。需要全局安装的 `@playwright/mcp`（或用 `PLAYWRIGHT_MODULE` 指向一个 playwright 包目录）和一个 Chromium 二进制：
+端到端验证 `scripts/e2e.mjs`：起一个本地假 OpenAI 流式服务，用 Playwright 以未打包扩展方式启动有头 Chromium，打开真实的 leetcode.com 两数之和页面，在侧边栏页面里点「生成提示」，断言四个折叠区块、代码块内容和发出的请求；再切到「评估」点「评估代码」，断言四个展开的区块和请求里带着编辑器代码。需要全局安装的 `@playwright/mcp`（或用 `PLAYWRIGHT_MODULE` 指向一个 playwright 包目录）和一个 Chromium 二进制：
 
 ```sh
 CHROMIUM_PATH="/path/to/Chromium" node scripts/e2e.mjs

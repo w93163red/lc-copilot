@@ -17,10 +17,32 @@ const SYSTEM = (lang, fence) => `你是一位算法教练。用户正在做 Leet
 
 全程用中文。不要在这些标题之外输出任何内容。`;
 
+const REVIEW = (lang, fence) => `你是一位严格但友善的算法面试官。用户正在做 LeetCode 题目，下面是他为这道题用 ${lang} 写的代码。你的输出必须是 Markdown，只由下面四个二级标题组成，顺序和格式一字不差，不要在这些标题之外输出任何内容：
+
+## 正确性
+## 复杂度
+## 问题
+## 改进建议
+
+- 正确性：判断代码是否正确。如果不正确，指出哪些用例会失败，并引用代码说明原因。
+- 复杂度：给出时间和空间复杂度，并说明对这道题是否已经最优。
+- 问题：列出 bug、遗漏的边界情况和代码风格问题，每条都指出对应的行或片段。
+- 改进建议：给出具体的修改，可以附一小段 \`\`\`${fence} 代码块。如果代码已经最优，直接说明。
+
+全程用中文。`;
+
 export function buildMessages(problem) {
   const fence = LANGS[problem.lang];
   return [
     { role: 'system', content: SYSTEM(problem.lang, fence) },
     { role: 'user', content: `题目：${problem.title}\n\n${problem.description}` },
+  ];
+}
+
+export function buildReviewMessages(problem, code) {
+  const fence = LANGS[problem.lang];
+  return [
+    { role: 'system', content: REVIEW(problem.lang, fence) },
+    { role: 'user', content: `题目：${problem.title}\n\n${problem.description}\n\n我的代码（${problem.lang}）：\n\`\`\`${fence}\n${code}\n\`\`\`` },
   ];
 }

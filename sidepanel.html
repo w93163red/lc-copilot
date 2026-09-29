@@ -8,16 +8,35 @@
 <body>
   <header>
     <h1 id="title"></h1>
-    <div id="lang"></div>
+    <div class="meta">
+      <span id="difficulty" hidden></span>
+      <span id="lang"></span>
+    </div>
     <div class="toolbar">
-      <button id="generate" class="primary">生成提示</button>
-      <button id="stop">停止</button>
       <button id="retry">重新读取</button>
       <button id="settings">设置</button>
     </div>
-    <div id="status"></div>
   </header>
-  <main id="sections"></main>
+  <div class="tabs" role="tablist">
+    <button id="tab-hints" class="tab" role="tab" aria-selected="true" aria-controls="hints">提示</button>
+    <button id="tab-review" class="tab" role="tab" aria-selected="false" aria-controls="review">评估</button>
+  </div>
+  <section id="hints" role="tabpanel" aria-labelledby="tab-hints">
+    <div class="toolbar">
+      <button id="generate" class="primary">生成提示</button>
+      <button id="stop">停止</button>
+    </div>
+    <div id="status"></div>
+    <div id="sections"></div>
+  </section>
+  <section id="review" role="tabpanel" aria-labelledby="tab-review" hidden>
+    <div class="toolbar">
+      <button id="evaluate" class="primary">评估代码</button>
+      <button id="stop-review">停止</button>
+    </div>
+    <div id="status-review"></div>
+    <div id="sections-review"></div>
+  </section>
   <script src="vendor/marked.min.js"></script>
   <script type="module" src="sidepanel.js"></script>
 </body>

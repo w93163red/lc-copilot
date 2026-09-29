@@ -12,11 +12,18 @@ if (!EXE) throw new Error('set CHROMIUM_PATH to a Chromium/Chrome binary (extens
 const { chromium } = await import(path.join(PW, 'index.mjs'));
 const OUT = os.tmpdir();
 
-const CANNED = [
+const HINTS = [
   '## 提示 1\n\n先想暴力：两层循环枚举每一对。瓶颈在哪？\n\n',
   '## 提示 2\n\n关键观察：对每个 x，只需要知道 target - x 是否出现过。用哈希表记录“见过的数 → 下标”。\n\n',
   '## 提示 3\n\n一次遍历。对每个 nums[i]，查 target - nums[i] 是否在表里；在就返回，不在就把 nums[i] 存进去。时间 O(n)，空间 O(n)。\n\n',
   '## 完整代码\n\n```cpp\n// ## 这一行不是标题\nclass Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        unordered_map<int,int> seen;\n        for (int i = 0; i < nums.size(); ++i) {\n            auto it = seen.find(target - nums[i]);\n            if (it != seen.end()) return {it->second, i};\n            seen[nums[i]] = i;\n        }\n        return {};\n    }\n};\n```\n\n哈希表把查找降到 O(1)。\n',
+];
+
+const REVIEW = [
+  '## 正确性\n\n正确。哈希表一次遍历能覆盖所有用例，包括重复元素如 [3,3]。\n\n',
+  '## 复杂度\n\n时间 O(n)，空间 O(n)。对这道题已经最优。\n\n',
+  '## 问题\n\n- `nums.size()` 是 size_t，与 int i 比较会有符号警告。\n- 找不到答案时返回空 vector，题目保证有解，可以接受。\n\n',
+  '## 改进建议\n\n循环变量改成 size_t：\n\n```cpp\nfor (size_t i = 0; i < nums.size(); ++i) {\n```\n\n其余已经最优。\n',
 ];
 
 const received = [];
@@ -26,12 +33,14 @@ const server = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
   req.on('end', () => {
-    received.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(body) });
+    const parsed = JSON.parse(body);
+    received.push({ url: req.url, auth: req.headers.authorization, body: parsed });
+    const canned = parsed.messages.some((m) => m.content.includes('我的代码')) ? REVIEW : HINTS;
     res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream' });
     let i = 0;
     const tick = () => {
-      if (i < CANNED.length) {
-        for (const piece of CANNED[i].match(/[\s\S]{1,7}/g)) {
+      if (i < canned.length) {
+        for (const piece of canned[i].match(/[\s\S]{1,7}/g)) {
           res.write('data: ' + JSON.stringify({ choices: [{ delta: { content: piece } }] }) + '\n\n');
         }
         i++;
@@ -112,8 +121,25 @@ for (let i = 0; received.length < 2; i++) {
 }
 await panel.waitForFunction(() => document.querySelector('#status').textContent.includes('完成'), null, { timeout: 30000 });
 
+await panel.click('#tab-review');
+await panel.click('#evaluate');
+await panel.waitForFunction(() => document.querySelectorAll('#sections-review details').length === 4, null, { timeout: 30000 });
+await panel.waitForFunction(() => document.querySelector('#status-review').textContent.includes('完成'), null, { timeout: 30000 });
+assert.deepEqual(await panel.$$eval('#sections-review details > summary', (els) => els.map((e) => e.textContent.trim())), ['正确性', '复杂度', '问题', '改进建议']);
+assert.deepEqual(await panel.$$eval('#sections-review details', (els) => els.map((e) => e.open)), [true, true, true, true], 'review sections open by default');
+assert.equal(received.length, 3);
+const reviewUser = received[2].body.messages.at(-1).content;
+assert.match(reviewUser, /class Solution/, 'review request carries the editor code');
+assert.match(reviewUser, /我的代码（C\+\+）/);
+await panel.click('#sections-review details:nth-of-type(1) > summary');
+assert.equal(await panel.$eval('#sections-review details:nth-of-type(1)', (e) => e.open), false, 'closed review section stays closed');
+
+await panel.click('#tab-hints');
 await panel.screenshot({ path: path.join(OUT, 'leetcode-copilot-panel.png'), fullPage: true });
 console.log('screenshot:', path.join(OUT, 'leetcode-copilot-panel.png'));
+await panel.click('#tab-review');
+await panel.screenshot({ path: path.join(OUT, 'leetcode-copilot-review.png'), fullPage: true });
+console.log('screenshot:', path.join(OUT, 'leetcode-copilot-review.png'));
 console.log('E2E OK. request:', JSON.stringify({ auth: received[0].auth, model: received[0].body.model, roles: received[0].body.messages.map((m) => m.role) }));
 await ctx.close();
 server.close();

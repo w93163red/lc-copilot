@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMessages } from '../src/prompt.js';
+import { buildMessages, buildReviewMessages } from '../src/prompt.js';
 
 const problem = {
   slug: 'two-sum',
@@ -26,4 +26,22 @@ test('user message carries the title and description', () => {
 test('a different language changes both the prose and the fence tag', () => {
   const [system] = buildMessages({ ...problem, lang: 'Go' });
   assert.match(system.content, /用 Go 写出.*```golang 代码块/);
+});
+
+test('review system message fixes the four headings in order and names the fence', () => {
+  const [system, user] = buildReviewMessages(problem, 'int x = 1;');
+  assert.equal(system.role, 'system');
+  assert.match(system.content, /^你是一位严格但友善的算法面试官/);
+  assert.match(system.content, /用 C\+\+ 写的代码/);
+  assert.match(system.content, /## 正确性\n## 复杂度\n## 问题\n## 改进建议/);
+  assert.match(system.content, /可以附一小段 ```cpp 代码块/);
+  assert.equal(user.role, 'user');
+});
+
+test('review user message carries the problem and the fenced code in the editor language', () => {
+  const [, user] = buildReviewMessages({ ...problem, lang: 'Python3' }, 'class Solution:\n    pass');
+  assert.equal(
+    user.content,
+    '题目：Two Sum\n\nGiven an array of integers nums and an integer target...\n\n我的代码（Python3）：\n```python3\nclass Solution:\n    pass\n```',
+  );
 });

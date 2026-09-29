@@ -6,7 +6,11 @@ body {
 }
 header { position: sticky; top: 0; background: Canvas; padding-bottom: 8px; }
 h1 { font-size: 16px; margin: 0 0 2px; overflow-wrap: anywhere; }
-#lang { font-size: 12px; opacity: .7; margin-bottom: 8px; min-height: 1.2em; }
+.meta { display: flex; gap: 6px; align-items: center; font-size: 12px; opacity: .8; margin-bottom: 8px; min-height: 1.2em; }
+#difficulty { border: 1px solid currentColor; border-radius: 999px; padding: 0 8px; }
+#difficulty[hidden], section[hidden] { display: none; }
+.tabs { display: flex; gap: 4px; margin: 8px 0; }
+.tab[aria-selected="true"] { background: color-mix(in srgb, CanvasText 18%, Canvas); font-weight: 600; }
 .toolbar { display: flex; gap: 6px; flex-wrap: wrap; }
 button {
   padding: 4px 12px;
@@ -19,8 +23,8 @@ button {
 }
 button.primary { background: #1f883d; border-color: #1f883d; color: #fff; }
 button[hidden] { display: none; }
-#status { min-height: 1.6em; margin-top: 6px; font-size: 13px; opacity: .8; }
-#status.error { color: #d1242f; opacity: 1; }
+#status, #status-review { min-height: 1.6em; margin: 6px 0; font-size: 13px; opacity: .8; }
+#status.error, #status-review.error { color: #d1242f; opacity: 1; }
 details {
   border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
   border-radius: 8px;

@@ -1,70 +1,94 @@
-import { readProblem } from './src/page.js';
+import { readProblem, readEditorCode } from './src/page.js';
 import { detectLang } from './src/langs.js';
-import { buildMessages } from './src/prompt.js';
+import { buildMessages, buildReviewMessages } from './src/prompt.js';
 import { splitSections } from './src/sections.js';
 import { streamChat } from './src/llm.js';
 import { loadSettings, validateSettings } from './src/settings.js';
 import { loadHint, saveHint, doneStatus } from './src/hints.js';
 
 const PROBLEM_URL = /^https:\/\/leetcode\.com\/problems\/[^/?#]+/;
-const el = Object.fromEntries(
-  ['title', 'lang', 'generate', 'stop', 'retry', 'settings', 'status', 'sections'].map((id) => [id, document.getElementById(id)]),
-);
+const $ = (id) => document.getElementById(id);
+const el = Object.fromEntries(['title', 'difficulty', 'lang', 'retry', 'settings'].map((id) => [id, $(id)]));
+const TRACKS = {
+  hints: {
+    key: 'hints',
+    tab: $('tab-hints'), panel: $('hints'), generate: $('generate'), stop: $('stop'), status: $('status'), sections: $('sections'),
+    label: '生成提示', relabel: '重新生成', busy: '生成中…', defaultOpen: false, toggled: new Set(), controller: null,
+  },
+  review: {
+    key: 'review',
+    tab: $('tab-review'), panel: $('review'), generate: $('evaluate'), stop: $('stop-review'), status: $('status-review'), sections: $('sections-review'),
+    label: '评估代码', relabel: '重新评估', busy: '评估中…', defaultOpen: true, toggled: new Set(), controller: null,
+  },
+};
+const IDLE = { status: 'idle' };
 const pinnedTabId = Number(new URLSearchParams(location.search).get('tabId')) || null;
-const cache = new Map();
-const openTitles = new Set();
-let state = { status: 'no-problem', message: '' };
-let controller = null;
+const entries = new Map();
+let entry = null;
+let message = '';
+let view = 'hints';
 
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 marked.use({ renderer: { html: (token) => escapeHtml(token.text) } });
 
-function show(next) {
-  if (next.problem) cache.set(next.problem.slug, next);
-  state = next;
+function showMessage(text) {
+  entry = null;
+  message = text;
   render();
 }
 
-function update(next) {
-  cache.set(next.problem.slug, next);
-  if (state.problem?.slug === next.problem.slug) show(next);
+function setTrack(slug, track, state) {
+  entries.get(slug)[track.key] = state;
+  if (entry?.problem.slug === slug) render();
 }
 
 function render() {
-  const { status, problem } = state;
+  const problem = entry?.problem;
   el.title.textContent = problem ? problem.title : '未检测到题目';
-  el.lang.textContent = problem ? problem.lang : '';
-  el.generate.hidden = status === 'no-problem' || status === 'streaming';
-  el.generate.textContent = status === 'idle' ? '生成提示' : '重新生成';
-  el.stop.hidden = status !== 'streaming';
-  el.retry.hidden = status !== 'no-problem';
-  el.status.className = status === 'error' ? 'error' : '';
-  el.status.textContent =
-    { 'no-problem': state.message, idle: '', streaming: '生成中…', done: doneStatus(state), error: state.message }[status];
-  renderSections(state.markdown ? splitSections(state.markdown) : []);
+  el.difficulty.textContent = problem?.difficulty ?? '';
+  el.difficulty.hidden = !problem?.difficulty;
+  el.lang.textContent = problem?.lang ?? '';
+  el.retry.hidden = Boolean(problem);
+  for (const track of Object.values(TRACKS)) {
+    track.tab.setAttribute('aria-selected', track.key === view);
+    track.panel.hidden = track.key !== view;
+    renderTrack(track, entry?.[track.key] ?? IDLE, problem);
+  }
 }
 
-function renderSections(sections) {
+function renderTrack(track, state, problem) {
+  const { status } = state;
+  track.generate.hidden = !problem || status === 'streaming';
+  track.generate.textContent = status === 'idle' ? track.label : track.relabel;
+  track.stop.hidden = status !== 'streaming';
+  track.status.className = status === 'error' ? 'error' : '';
+  track.status.textContent = problem
+    ? { idle: '', streaming: track.busy, done: doneStatus({ ...state, problem }), error: state.message }[status]
+    : message;
+  renderSections(track, state.markdown ? splitSections(state.markdown) : []);
+}
+
+function renderSections({ sections: container, toggled, defaultOpen }, sections) {
   sections.forEach((section, i) => {
-    let node = el.sections.children[i];
+    let node = container.children[i];
     if (node?.dataset.title !== section.title) {
       const fresh = document.createElement('details');
       fresh.dataset.title = section.title;
       fresh.innerHTML = '<summary></summary><div class="body"></div>';
       fresh.firstChild.textContent = section.title;
-      fresh.addEventListener('toggle', () => (fresh.open ? openTitles.add(section.title) : openTitles.delete(section.title)));
+      fresh.addEventListener('toggle', () => (fresh.open === defaultOpen ? toggled.delete(section.title) : toggled.add(section.title)));
       if (node) node.replaceWith(fresh);
-      else el.sections.append(fresh);
+      else container.append(fresh);
       node = fresh;
     }
-    node.open = openTitles.has(section.title);
+    node.open = toggled.has(section.title) !== defaultOpen;
     if (node.dataset.body !== section.body) {
       node.dataset.body = section.body;
       node.lastChild.innerHTML = marked.parse(section.body);
       for (const pre of node.lastChild.querySelectorAll('pre')) addCopyButton(pre);
     }
   });
-  while (el.sections.children.length > sections.length) el.sections.lastChild.remove();
+  while (container.children.length > sections.length) container.lastChild.remove();
 }
 
 function addCopyButton(pre) {
@@ -93,7 +117,7 @@ async function refresh() {
     tab = null;
   }
   if (!tab || !PROBLEM_URL.test(tab.url ?? '')) {
-    show({ status: 'no-problem', message: '当前标签页不是 LeetCode 题目页面，请打开 https://leetcode.com/problems/… 后重试。' });
+    showMessage('当前标签页不是 LeetCode 题目页面，请打开 https://leetcode.com/problems/… 后重试。');
     return;
   }
   let raw;
@@ -103,13 +127,19 @@ async function refresh() {
     raw = null;
   }
   if (!raw || !raw.description) {
-    show({ status: 'no-problem', message: '题目页面还没加载完成，请等页面加载后点击“重新读取”。' });
+    showMessage('题目页面还没加载完成，请等页面加载后点击“重新读取”。');
     return;
   }
   const { editorButtons, ...rest } = raw;
   const problem = { ...rest, lang: detectLang(editorButtons) };
-  const next = cache.get(problem.slug) ?? (await storedState(problem.slug)) ?? { status: 'idle' };
-  show({ ...next, problem });
+  let found = entries.get(problem.slug);
+  if (!found) {
+    found = { problem, hints: (await storedState(problem.slug)) ?? IDLE, review: IDLE };
+    entries.set(problem.slug, found);
+  }
+  found.problem = problem;
+  entry = found;
+  render();
 }
 
 async function storedState(slug) {
@@ -117,35 +147,64 @@ async function storedState(slug) {
   return hint && { status: 'done', markdown: hint.markdown, cached: { lang: hint.lang, savedAt: hint.savedAt } };
 }
 
-async function generate() {
-  const { problem } = state;
+async function run(track, problem, messages) {
+  const { slug } = problem;
   const settings = await loadSettings();
   const invalid = validateSettings(settings);
   if (invalid) {
-    update({ status: 'error', problem, message: `${invalid}，请先在设置中填写。` });
-    return;
+    setTrack(slug, track, { status: 'error', message: `${invalid}，请先在设置中填写。` });
+    return null;
   }
-  controller?.abort();
-  controller = new AbortController();
-  const { signal } = controller;
+  track.controller?.abort();
+  track.controller = new AbortController();
+  const { signal } = track.controller;
   let markdown = '';
-  update({ status: 'streaming', problem, markdown });
+  setTrack(slug, track, { status: 'streaming', markdown });
   try {
-    await streamChat(settings, buildMessages(problem), (delta) => {
+    await streamChat(settings, messages, (delta) => {
       markdown += delta;
-      update({ status: 'streaming', problem, markdown });
+      setTrack(slug, track, { status: 'streaming', markdown });
     }, signal);
   } catch (err) {
-    if (signal.aborted) update({ status: 'done', problem, markdown });
-    else update({ status: 'error', problem, markdown, message: `生成失败：${err.message}` });
-    return;
+    setTrack(slug, track, signal.aborted ? { status: 'done', markdown } : { status: 'error', markdown, message: `生成失败：${err.message}` });
+    return null;
   }
-  update({ status: 'done', problem, markdown });
-  await saveHint(problem.slug, { markdown, lang: problem.lang });
+  setTrack(slug, track, { status: 'done', markdown });
+  return markdown;
 }
 
-el.generate.addEventListener('click', generate);
-el.stop.addEventListener('click', () => controller?.abort());
+async function generate() {
+  const { problem } = entry;
+  const markdown = await run(TRACKS.hints, problem, buildMessages(problem));
+  if (markdown !== null) await saveHint(problem.slug, { markdown, lang: problem.lang });
+}
+
+async function evaluate() {
+  const { problem } = entry;
+  let code;
+  try {
+    const tab = await currentTab();
+    [{ result: code }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: 'MAIN', func: readEditorCode });
+  } catch (err) {
+    setTrack(problem.slug, TRACKS.review, { status: 'error', message: `读取编辑器失败：${err.message}` });
+    return;
+  }
+  if (!code?.trim()) {
+    setTrack(problem.slug, TRACKS.review, { status: 'error', message: '编辑器里没有代码' });
+    return;
+  }
+  await run(TRACKS.review, problem, buildReviewMessages(problem, code));
+}
+
+for (const track of Object.values(TRACKS)) {
+  track.tab.addEventListener('click', () => {
+    view = track.key;
+    render();
+  });
+  track.stop.addEventListener('click', () => track.controller?.abort());
+}
+TRACKS.hints.generate.addEventListener('click', generate);
+TRACKS.review.generate.addEventListener('click', evaluate);
 el.retry.addEventListener('click', refresh);
 el.settings.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
