@@ -26,6 +26,13 @@ const REVIEW = [
   '## 改进建议\n\n循环变量改成 size_t：\n\n```cpp\nfor (size_t i = 0; i < nums.size(); ++i) {\n```\n\n其余已经最优。\n',
 ];
 
+const DEBUG = [
+  '## 错误原因\n\nWrong Answer 表示输出和预期不一致。输入 nums = [3,3]，target = 6 时返回了 []，预期 [0,1]：代码在存入哈希表之前没有先查表，两个相同的数只留下一个下标。\n\n',
+  '## 出错位置\n\n`seen[nums[i]] = i;` 写在 `seen.find(target - nums[i])` 之前，第二个 3 查到的是它自己。\n\n',
+  '## 修复思路\n\n1. 先查 target - nums[i] 是否已在表里。\n2. 查不到再把当前数存进去。\n3. 这样重复元素也能配对。\n\n',
+  '## 修正后的代码\n\n```cpp\nclass Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        unordered_map<int,int> seen;\n        for (int i = 0; i < nums.size(); ++i) {\n            auto it = seen.find(target - nums[i]); // 先查再存\n            if (it != seen.end()) return {it->second, i};\n            seen[nums[i]] = i;\n        }\n        return {};\n    }\n};\n```\n\n把查表放到存表前面，[3,3] 就能返回 [0,1]。\n',
+];
+
 const received = [];
 const server = http.createServer((req, res) => {
   const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
@@ -35,7 +42,8 @@ const server = http.createServer((req, res) => {
   req.on('end', () => {
     const parsed = JSON.parse(body);
     received.push({ url: req.url, auth: req.headers.authorization, body: parsed });
-    const canned = parsed.messages.some((m) => m.content.includes('我的代码')) ? REVIEW : HINTS;
+    const text = parsed.messages.map((m) => m.content).join('\n');
+    const canned = text.includes('运行结果：') ? DEBUG : text.includes('我的代码') ? REVIEW : HINTS;
     res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream' });
     let i = 0;
     const tick = () => {
@@ -134,6 +142,32 @@ assert.match(reviewUser, /class Solution/, 'review request carries the editor co
 assert.match(reviewUser, /我的代码（C\+\+）/);
 await panel.click('#sections-review details:nth-of-type(1) > summary');
 assert.equal(await panel.$eval('#sections-review details:nth-of-type(1)', (e) => e.open), false, 'closed review section stays closed');
+
+await lc.evaluate(() => {
+  const tab = document.querySelector('.flexlayout__tab[data-layout-path="/c1/ts1/t1"]');
+  tab.innerHTML = '<div><span data-e2e-locator="console-result">Wrong Answer</span></div><div>Input</div><pre>nums = [3,3]\ntarget = 6</pre><div>Output</div><pre>[]</pre><div>Expected</div><pre>[0,1]</pre>';
+  tab.style.display = 'block';
+});
+await panel.click('#tab-debug');
+await panel.waitForFunction(() => document.querySelector('#result-input').value.includes('Wrong Answer'), null, { timeout: 30000 });
+assert.match(await panel.inputValue('#result-input'), /\[0,1\]/, 'auto-read result carries the expected output');
+await panel.click('#debug-run');
+await panel.waitForFunction(() => document.querySelectorAll('#sections-debug details').length === 4, null, { timeout: 30000 });
+await panel.waitForFunction(() => document.querySelector('#status-debug').textContent.includes('完成'), null, { timeout: 30000 });
+assert.deepEqual(await panel.$$eval('#sections-debug details > summary', (els) => els.map((e) => e.textContent.trim())), ['错误原因', '出错位置', '修复思路', '修正后的代码']);
+assert.deepEqual(await panel.$$eval('#sections-debug details', (els) => els.map((e) => e.open)), [true, true, true, false], 'explanations open, corrected code collapsed');
+assert.equal(received.length, 4);
+const debugUser = received[3].body.messages.at(-1).content;
+assert.match(debugUser, /Wrong Answer/, 'debug request carries the verdict');
+assert.match(debugUser, /\[0,1\]/, 'debug request carries the expected output');
+assert.match(debugUser, /class Solution/, 'debug request carries the editor code');
+await panel.screenshot({ path: path.join(OUT, 'leetcode-copilot-debug.png'), fullPage: true, animations: 'disabled' });
+console.log('screenshot:', path.join(OUT, 'leetcode-copilot-debug.png'));
+assert.equal(await panel.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'no horizontal scroll at 360px on the debug tab');
+await panel.fill('#result-input', '');
+await panel.click('#debug-run');
+await panel.waitForFunction(() => document.querySelector('#status-debug').textContent.includes('没有运行结果'), null, { timeout: 10000 });
+assert.equal(received.length, 4, 'blank result sends no request');
 
 await panel.click('#tab-hints');
 await panel.screenshot({ path: path.join(OUT, 'leetcode-copilot-panel.png'), fullPage: true, animations: 'disabled' });

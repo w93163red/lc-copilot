@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMessages, buildReviewMessages } from '../src/prompt.js';
+import { buildMessages, buildReviewMessages, buildDebugMessages } from '../src/prompt.js';
 
 const problem = {
   slug: 'two-sum',
@@ -43,5 +43,23 @@ test('review user message carries the problem and the fenced code in the editor 
   assert.equal(
     user.content,
     '题目：Two Sum\n\nGiven an array of integers nums and an integer target...\n\n我的代码（Python3）：\n```python3\nclass Solution:\n    pass\n```',
+  );
+});
+
+test('debug system message fixes the four headings in order and names the fence', () => {
+  const [system, user] = buildDebugMessages(problem, 'int x = 1;', 'Wrong Answer');
+  assert.equal(system.role, 'system');
+  assert.match(system.content, /^你是一位耐心的算法助教。用户正在做 LeetCode 题目，他用 C\+\+ 写的代码没有通过，先帮用户看懂错在哪，再引导修复/);
+  assert.match(system.content, /## 错误原因\n## 出错位置\n## 修复思路\n## 修正后的代码/);
+  assert.match(system.content, /用 C\+\+ 给出完整的修正实现，放在一个 ```cpp 代码块里/);
+  assert.match(system.content, /如果运行结果显示 Accepted/);
+  assert.equal(user.role, 'user');
+});
+
+test('debug user message carries the problem, the fenced code and the fenced run result', () => {
+  const [, user] = buildDebugMessages({ ...problem, lang: 'Python3' }, 'class Solution:\n    pass', 'Wrong Answer\nInput\nnums = [3,3]\ntarget = 6\nOutput\n[]\nExpected\n[0,1]');
+  assert.equal(
+    user.content,
+    '题目：Two Sum\n\nGiven an array of integers nums and an integer target...\n\n我的代码（Python3）：\n```python3\nclass Solution:\n    pass\n```\n\n运行结果：\n```\nWrong Answer\nInput\nnums = [3,3]\ntarget = 6\nOutput\n[]\nExpected\n[0,1]\n```',
   );
 });

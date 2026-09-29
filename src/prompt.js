@@ -31,6 +31,20 @@ const REVIEW = (lang, fence) => `你是一位严格但友善的算法面试官�
 
 全程用中文。`;
 
+const DEBUG = (lang, fence) => `你是一位耐心的算法助教。用户正在做 LeetCode 题目，他用 ${lang} 写的代码没有通过，先帮用户看懂错在哪，再引导修复。你的输出必须是 Markdown，只由下面四个二级标题组成，顺序和格式一字不差，不要在这些标题之外输出任何内容：
+
+## 错误原因
+## 出错位置
+## 修复思路
+## 修正后的代码
+
+- 错误原因：解释运行结果里的判定或报错是什么意思，以及这段代码出错的根本原因；如果结果里有失败的输入，引用它。
+- 出错位置：指出具体出错的行或表达式，原样引用。
+- 修复思路：分步骤说明怎么改，这一节不要给出完整的修正代码。
+- 修正后的代码：用 ${lang} 给出完整的修正实现，放在一个 \`\`\`${fence} 代码块里，代码内的注释用中文，代码块后用一两句话说明改动。
+
+如果运行结果显示 Accepted，就在「错误原因」里说明代码已经通过，其余几节简短带过。全程用中文。`;
+
 export function buildMessages(problem) {
   const fence = LANGS[problem.lang];
   return [
@@ -44,5 +58,13 @@ export function buildReviewMessages(problem, code) {
   return [
     { role: 'system', content: REVIEW(problem.lang, fence) },
     { role: 'user', content: `题目：${problem.title}\n\n${problem.description}\n\n我的代码（${problem.lang}）：\n\`\`\`${fence}\n${code}\n\`\`\`` },
+  ];
+}
+
+export function buildDebugMessages(problem, code, result) {
+  const fence = LANGS[problem.lang];
+  return [
+    { role: 'system', content: DEBUG(problem.lang, fence) },
+    { role: 'user', content: `题目：${problem.title}\n\n${problem.description}\n\n我的代码（${problem.lang}）：\n\`\`\`${fence}\n${code}\n\`\`\`\n\n运行结果：\n\`\`\`\n${result}\n\`\`\`` },
   ];
 }

@@ -21,3 +21,17 @@ export function readEditorCode() {
   const model = models.find((m) => m.getLanguageId() !== 'plaintext');
   return model ? model.getValue() : '';
 }
+
+export function readRunResult() {
+  const VERDICT = /^(Accepted|Wrong Answer|Runtime Error|Compile Error|Time Limit Exceeded|Memory Limit Exceeded|Output Limit Exceeded)\b/m;
+  try {
+    const tabs = Array.from(document.querySelectorAll('.flexlayout__tab'));
+    const node = document.querySelector('[data-e2e-locator="console-result"], [data-e2e-locator="submission-result"]')
+      ?? [...tabs.filter((tab) => tab.dataset.layoutPath === '/c1/ts1/t1'), ...tabs].find((tab) => VERDICT.test(tab.innerText));
+    if (!node) return '';
+    const text = (node.closest('.flexlayout__tab') ?? node).innerText;
+    return text.split('\n').map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n').slice(0, 4000);
+  } catch {
+    return '';
+  }
+}

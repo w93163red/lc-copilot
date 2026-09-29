@@ -20,6 +20,7 @@
   <div class="tabs" role="tablist">
     <button id="tab-hints" class="tab" role="tab" aria-selected="true" aria-controls="hints">提示</button>
     <button id="tab-review" class="tab" role="tab" aria-selected="false" aria-controls="review">评估</button>
+    <button id="tab-debug" class="tab" role="tab" aria-selected="false" aria-controls="debug">调试</button>
   </div>
   <section id="hints" role="tabpanel" aria-labelledby="tab-hints">
     <div class="toolbar">
@@ -36,6 +37,19 @@
     </div>
     <div id="status-review" class="status"></div>
     <div id="sections-review" class="accordion"></div>
+  </section>
+  <section id="debug" role="tabpanel" aria-labelledby="tab-debug" hidden>
+    <div>
+      <label class="label" for="result-input">运行结果</label>
+      <textarea id="result-input" class="input textarea" rows="6" placeholder="点「读取结果」自动填充，或把报错、Wrong Answer 的输入 / 输出 / 预期粘贴到这里"></textarea>
+    </div>
+    <div class="toolbar">
+      <button id="read-result" class="btn btn-outline">读取结果</button>
+      <button id="debug-run" class="btn btn-primary">找错</button>
+      <button id="stop-debug" class="btn btn-outline" hidden>停止</button>
+    </div>
+    <div id="status-debug" class="status"></div>
+    <div id="sections-debug" class="accordion"></div>
   </section>
   <script src="vendor/marked.min.js"></script>
   <script type="module" src="sidepanel.js"></script>

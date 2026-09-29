@@ -1,6 +1,6 @@
-import { readProblem, readEditorCode } from './src/page.js';
+import { readProblem, readEditorCode, readRunResult } from './src/page.js';
 import { detectLang } from './src/langs.js';
-import { buildMessages, buildReviewMessages } from './src/prompt.js';
+import { buildMessages, buildReviewMessages, buildDebugMessages } from './src/prompt.js';
 import { splitSections } from './src/sections.js';
 import { streamChat } from './src/llm.js';
 import { loadSettings, validateSettings } from './src/settings.js';
@@ -20,7 +20,14 @@ const TRACKS = {
     tab: $('tab-review'), panel: $('review'), generate: $('evaluate'), stop: $('stop-review'), status: $('status-review'), sections: $('sections-review'),
     label: '评估代码', relabel: '重新评估', busy: '评估中…', defaultOpen: true, toggled: new Set(), controller: null,
   },
+  debug: {
+    key: 'debug',
+    tab: $('tab-debug'), panel: $('debug'), generate: $('debug-run'), stop: $('stop-debug'), status: $('status-debug'), sections: $('sections-debug'),
+    read: $('read-result'), input: $('result-input'),
+    label: '找错', relabel: '重新找错', busy: '分析中…', defaultOpen: (title) => title !== '修正后的代码', toggled: new Set(), controller: null,
+  },
 };
+const NO_RESULT = '没有读到运行结果，请先在页面上 Run 或 Submit，或手动粘贴';
 const IDLE = { status: 'idle' };
 const pinnedTabId = Number(new URLSearchParams(location.search).get('tabId')) || null;
 const entries = new Map();
@@ -52,6 +59,9 @@ function render() {
   el.lang.textContent = problem?.lang ?? '';
   el.lang.hidden = !problem;
   el.retry.hidden = Boolean(problem);
+  TRACKS.debug.read.hidden = !problem;
+  const resultText = entry?.resultText ?? '';
+  if (TRACKS.debug.input.value !== resultText) TRACKS.debug.input.value = resultText;
   for (const track of Object.values(TRACKS)) {
     track.tab.setAttribute('aria-selected', track.key === view);
     track.panel.hidden = track.key !== view;
@@ -74,18 +84,19 @@ const spinner = () => Object.assign(document.createElement('span'), { className:
 
 function renderSections({ sections: container, toggled, defaultOpen }, sections) {
   sections.forEach((section, i) => {
+    const open = typeof defaultOpen === 'function' ? defaultOpen(section.title) : defaultOpen;
     let node = container.children[i];
     if (node?.dataset.title !== section.title) {
       const fresh = document.createElement('details');
       fresh.dataset.title = section.title;
       fresh.innerHTML = '<summary></summary><div class="body"></div>';
       fresh.firstChild.textContent = section.title;
-      fresh.addEventListener('toggle', () => (fresh.open === defaultOpen ? toggled.delete(section.title) : toggled.add(section.title)));
+      fresh.addEventListener('toggle', () => (fresh.open === open ? toggled.delete(section.title) : toggled.add(section.title)));
       if (node) node.replaceWith(fresh);
       else container.append(fresh);
       node = fresh;
     }
-    node.open = toggled.has(section.title) !== defaultOpen;
+    node.open = toggled.has(section.title) !== open;
     if (node.dataset.body !== section.body) {
       node.dataset.body = section.body;
       node.lastChild.innerHTML = marked.parse(section.body);
@@ -136,14 +147,36 @@ async function refresh() {
   }
   const { editorButtons, ...rest } = raw;
   const problem = { ...rest, lang: detectLang(editorButtons) };
+  const previous = entry;
   let found = entries.get(problem.slug);
   if (!found) {
-    found = { problem, hints: (await storedState(problem.slug)) ?? IDLE, review: IDLE };
+    found = { problem, hints: (await storedState(problem.slug)) ?? IDLE, review: IDLE, debug: IDLE, resultText: '' };
     entries.set(problem.slug, found);
   }
   found.problem = problem;
   entry = found;
   render();
+  if (view === 'debug' && found !== previous) autoReadResult();
+}
+
+function autoReadResult() {
+  if (entry && !entry.resultText.trim()) readResult();
+}
+
+async function readResult() {
+  const current = entry;
+  let text;
+  try {
+    const tab = await currentTab();
+    [{ result: text }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readRunResult });
+  } catch {
+    text = '';
+  }
+  current.resultText = text || '';
+  const { slug } = current.problem;
+  if (!current.resultText) setTrack(slug, TRACKS.debug, { status: 'error', message: NO_RESULT });
+  else if (current.debug.status === 'error') setTrack(slug, TRACKS.debug, IDLE);
+  else setTrack(slug, TRACKS.debug, current.debug);
 }
 
 async function storedState(slug) {
@@ -183,32 +216,52 @@ async function generate() {
   if (markdown !== null) await saveHint(problem.slug, { markdown, lang: problem.lang });
 }
 
-async function evaluate() {
-  const { problem } = entry;
+async function editorCode(track, slug) {
   let code;
   try {
     const tab = await currentTab();
     [{ result: code }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: 'MAIN', func: readEditorCode });
   } catch (err) {
-    setTrack(problem.slug, TRACKS.review, { status: 'error', message: `读取编辑器失败：${err.message}` });
+    setTrack(slug, track, { status: 'error', message: `读取编辑器失败：${err.message}` });
+    return null;
+  }
+  if (code?.trim()) return code;
+  setTrack(slug, track, { status: 'error', message: '编辑器里没有代码' });
+  return null;
+}
+
+async function evaluate() {
+  const { problem } = entry;
+  const code = await editorCode(TRACKS.review, problem.slug);
+  if (code !== null) await run(TRACKS.review, problem, buildReviewMessages(problem, code));
+}
+
+async function debug() {
+  const { problem } = entry;
+  const result = entry.resultText.trim();
+  if (!result) {
+    setTrack(problem.slug, TRACKS.debug, { status: 'error', message: '没有运行结果，先点「读取结果」或粘贴报错' });
     return;
   }
-  if (!code?.trim()) {
-    setTrack(problem.slug, TRACKS.review, { status: 'error', message: '编辑器里没有代码' });
-    return;
-  }
-  await run(TRACKS.review, problem, buildReviewMessages(problem, code));
+  const code = await editorCode(TRACKS.debug, problem.slug);
+  if (code !== null) await run(TRACKS.debug, problem, buildDebugMessages(problem, code, result));
 }
 
 for (const track of Object.values(TRACKS)) {
   track.tab.addEventListener('click', () => {
     view = track.key;
     render();
+    if (track.key === 'debug') autoReadResult();
   });
   track.stop.addEventListener('click', () => track.controller?.abort());
 }
 TRACKS.hints.generate.addEventListener('click', generate);
 TRACKS.review.generate.addEventListener('click', evaluate);
+TRACKS.debug.generate.addEventListener('click', debug);
+TRACKS.debug.read.addEventListener('click', readResult);
+TRACKS.debug.input.addEventListener('input', () => {
+  if (entry) entry.resultText = TRACKS.debug.input.value;
+});
 el.retry.addEventListener('click', refresh);
 el.settings.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
