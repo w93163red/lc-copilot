@@ -11,7 +11,7 @@ function read() {
 }
 
 function show(kind, text) {
-  status.className = kind;
+  status.className = `status ${{ ok: 'text-success', error: 'alert-destructive' }[kind] ?? ''}`;
   status.textContent = text;
 }
 

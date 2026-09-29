@@ -45,9 +45,12 @@ function setTrack(slug, track, state) {
 function render() {
   const problem = entry?.problem;
   el.title.textContent = problem ? problem.title : '未检测到题目';
-  el.difficulty.textContent = problem?.difficulty ?? '';
-  el.difficulty.hidden = !problem?.difficulty;
+  const difficulty = problem?.difficulty ?? '';
+  el.difficulty.textContent = difficulty;
+  el.difficulty.className = `badge badge-${difficulty.toLowerCase()}`;
+  el.difficulty.hidden = !difficulty;
   el.lang.textContent = problem?.lang ?? '';
+  el.lang.hidden = !problem;
   el.retry.hidden = Boolean(problem);
   for (const track of Object.values(TRACKS)) {
     track.tab.setAttribute('aria-selected', track.key === view);
@@ -61,12 +64,13 @@ function renderTrack(track, state, problem) {
   track.generate.hidden = !problem || status === 'streaming';
   track.generate.textContent = status === 'idle' ? track.label : track.relabel;
   track.stop.hidden = status !== 'streaming';
-  track.status.className = status === 'error' ? 'error' : '';
-  track.status.textContent = problem
-    ? { idle: '', streaming: track.busy, done: doneStatus({ ...state, problem }), error: state.message }[status]
-    : message;
+  track.status.className = status === 'error' ? 'status alert-destructive' : 'status';
+  const text = problem ? { idle: '', streaming: track.busy, done: doneStatus({ ...state, problem }), error: state.message }[status] : message;
+  track.status.replaceChildren(...(problem && status === 'streaming' ? [spinner()] : []), text);
   renderSections(track, state.markdown ? splitSections(state.markdown) : []);
 }
+
+const spinner = () => Object.assign(document.createElement('span'), { className: 'spinner' });
 
 function renderSections({ sections: container, toggled, defaultOpen }, sections) {
   sections.forEach((section, i) => {
@@ -93,7 +97,7 @@ function renderSections({ sections: container, toggled, defaultOpen }, sections)
 
 function addCopyButton(pre) {
   const button = document.createElement('button');
-  button.className = 'copy';
+  button.className = 'copy btn btn-ghost btn-sm';
   button.textContent = '复制';
   button.addEventListener('click', async () => {
     await navigator.clipboard.writeText(pre.querySelector('code').textContent);

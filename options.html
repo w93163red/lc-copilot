@@ -3,35 +3,37 @@
 <head>
   <meta charset="utf-8">
   <title>LeetCode Copilot 设置</title>
-  <style>
-    body { font: 14px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; padding: 24px; max-width: 560px; color: #1f2328; }
-    h1 { font-size: 18px; margin: 0 0 16px; }
-    label { display: block; margin: 12px 0 4px; font-weight: 600; }
-    input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; font: inherit; }
-    .hint { color: #59636e; font-size: 12px; margin-top: 2px; }
-    .row { display: flex; gap: 8px; margin-top: 16px; }
-    button { padding: 6px 14px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; font: inherit; cursor: pointer; }
-    button.primary { background: #1f883d; border-color: #1f883d; color: #fff; }
-    button:disabled { opacity: .6; cursor: default; }
-    #status { margin-top: 12px; min-height: 1.5em; }
-    #status.ok { color: #1a7f37; }
-    #status.error { color: #d1242f; }
-  </style>
+  <link rel="stylesheet" href="ui.css">
 </head>
-<body>
-  <h1>LeetCode Copilot 设置</h1>
-  <label for="baseUrl">Base URL</label>
-  <input id="baseUrl" type="url" placeholder="https://api.openai.com/v1" spellcheck="false">
-  <div class="hint">OpenAI 兼容接口地址，不含 /chat/completions。</div>
-  <label for="apiKey">API Key</label>
-  <input id="apiKey" type="password" autocomplete="off" spellcheck="false">
-  <label for="model">模型</label>
-  <input id="model" type="text" placeholder="gpt-4o-mini" spellcheck="false">
-  <div class="row">
-    <button id="save" class="primary">保存</button>
-    <button id="test">测试连接</button>
-  </div>
-  <div id="status"></div>
+<body class="options">
+  <main>
+    <div class="card">
+      <div class="card-header">
+        <h1 class="card-title">LeetCode Copilot 设置</h1>
+        <p class="card-description">填写一个 OpenAI 兼容接口。设置只保存在本机的 chrome.storage.local。</p>
+      </div>
+      <div class="card-content">
+        <div class="field">
+          <label class="label" for="baseUrl">Base URL</label>
+          <input id="baseUrl" class="input" type="url" placeholder="https://api.openai.com/v1" spellcheck="false">
+          <p class="hint">OpenAI 兼容接口地址，不含 /chat/completions。</p>
+        </div>
+        <div class="field">
+          <label class="label" for="apiKey">API Key</label>
+          <input id="apiKey" class="input" type="password" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label class="label" for="model">模型</label>
+          <input id="model" class="input" type="text" placeholder="gpt-4o-mini" spellcheck="false">
+        </div>
+        <div class="toolbar">
+          <button id="save" class="btn btn-primary">保存</button>
+          <button id="test" class="btn btn-outline">测试连接</button>
+        </div>
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+  </main>
   <script type="module" src="options.js"></script>
 </body>
 </html>
