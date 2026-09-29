@@ -1,0 +1,43 @@
+:root { color-scheme: light dark; }
+body {
+  margin: 0;
+  padding: 12px;
+  font: 14px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+header { position: sticky; top: 0; background: Canvas; padding-bottom: 8px; }
+h1 { font-size: 16px; margin: 0 0 2px; overflow-wrap: anywhere; }
+#lang { font-size: 12px; opacity: .7; margin-bottom: 8px; min-height: 1.2em; }
+.toolbar { display: flex; gap: 6px; flex-wrap: wrap; }
+button {
+  padding: 4px 12px;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, CanvasText 6%, Canvas);
+  color: CanvasText;
+  font: inherit;
+  cursor: pointer;
+}
+button.primary { background: #1f883d; border-color: #1f883d; color: #fff; }
+button[hidden] { display: none; }
+#status { min-height: 1.6em; margin-top: 6px; font-size: 13px; opacity: .8; }
+#status.error { color: #d1242f; opacity: 1; }
+details {
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 0 10px;
+}
+summary { cursor: pointer; padding: 8px 0; font-weight: 600; user-select: none; }
+.body { padding-bottom: 8px; overflow-wrap: anywhere; }
+.body p:first-child { margin-top: 4px; }
+pre {
+  position: relative;
+  overflow-x: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, CanvasText 8%, Canvas);
+  font-size: 13px;
+}
+pre .copy { position: absolute; top: 6px; right: 6px; padding: 1px 8px; font-size: 12px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+p code, li code { padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, CanvasText 8%, Canvas); }

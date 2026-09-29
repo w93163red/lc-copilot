@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>LeetCode Copilot</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <h1 id="title"></h1>
+    <div id="lang"></div>
+    <div class="toolbar">
+      <button id="generate" class="primary">生成提示</button>
+      <button id="stop">停止</button>
+      <button id="retry">重新读取</button>
+      <button id="settings">设置</button>
+    </div>
+    <div id="status"></div>
+  </header>
+  <main id="sections"></main>
+  <script src="vendor/marked.min.js"></script>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
