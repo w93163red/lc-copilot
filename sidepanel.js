@@ -4,6 +4,7 @@ import { buildMessages } from './src/prompt.js';
 import { splitSections } from './src/sections.js';
 import { streamChat } from './src/llm.js';
 import { loadSettings, validateSettings } from './src/settings.js';
+import { loadHint, saveHint, doneStatus } from './src/hints.js';
 
 const PROBLEM_URL = /^https:\/\/leetcode\.com\/problems\/[^/?#]+/;
 const el = Object.fromEntries(
@@ -39,7 +40,7 @@ function render() {
   el.retry.hidden = status !== 'no-problem';
   el.status.className = status === 'error' ? 'error' : '';
   el.status.textContent =
-    { 'no-problem': state.message, idle: '', streaming: '生成中…', done: '完成', error: state.message }[status];
+    { 'no-problem': state.message, idle: '', streaming: '生成中…', done: doneStatus(state), error: state.message }[status];
   renderSections(state.markdown ? splitSections(state.markdown) : []);
 }
 
@@ -107,8 +108,13 @@ async function refresh() {
   }
   const { editorButtons, ...rest } = raw;
   const problem = { ...rest, lang: detectLang(editorButtons) };
-  const cached = cache.get(problem.slug);
-  show(cached ? { ...cached, problem } : { status: 'idle', problem });
+  const next = cache.get(problem.slug) ?? (await storedState(problem.slug)) ?? { status: 'idle' };
+  show({ ...next, problem });
+}
+
+async function storedState(slug) {
+  const hint = await loadHint(slug);
+  return hint && { status: 'done', markdown: hint.markdown, cached: { lang: hint.lang, savedAt: hint.savedAt } };
 }
 
 async function generate() {
@@ -129,11 +135,13 @@ async function generate() {
       markdown += delta;
       update({ status: 'streaming', problem, markdown });
     }, signal);
-    update({ status: 'done', problem, markdown });
   } catch (err) {
     if (signal.aborted) update({ status: 'done', problem, markdown });
     else update({ status: 'error', problem, markdown, message: `生成失败：${err.message}` });
+    return;
   }
+  update({ status: 'done', problem, markdown });
+  await saveHint(problem.slug, { markdown, lang: problem.lang });
 }
 
 el.generate.addEventListener('click', generate);
