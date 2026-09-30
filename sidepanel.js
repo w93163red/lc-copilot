@@ -76,7 +76,10 @@ function renderTrack(track, state, problem) {
   track.stop.hidden = status !== 'streaming';
   track.status.className = status === 'error' ? 'status alert-destructive' : 'status';
   const text = problem ? { idle: '', streaming: track.busy, done: doneStatus({ ...state, problem }), error: state.message }[status] : message;
-  track.status.replaceChildren(...(problem && status === 'streaming' ? [spinner()] : []), text);
+  const busy = Boolean(problem) && status === 'streaming';
+  if (Boolean(track.status.firstElementChild) !== busy || track.status.textContent !== text) {
+    track.status.replaceChildren(...(busy ? [spinner()] : []), text);
+  }
   renderSections(track, state.markdown ? splitSections(state.markdown) : []);
 }
 

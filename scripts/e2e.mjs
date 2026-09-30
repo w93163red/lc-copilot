@@ -85,6 +85,11 @@ await panel.waitForFunction(() => document.querySelector('#title')?.textContent.
 console.log('title:', await panel.locator('#title').textContent());
 
 await panel.click('#generate');
+await panel.waitForFunction(() => document.querySelector('#status').textContent.includes('生成中'), null, { timeout: 30000 });
+const spinner = await panel.$('#status .spinner');
+await new Promise((r) => setTimeout(r, 400));
+assert.equal(await spinner.evaluate((e) => e.isConnected), true, 'spinner survives streamed deltas');
+assert.equal(await panel.$$eval('#status .spinner', (els) => els.length), 1, 'exactly one spinner while streaming');
 await panel.waitForFunction(() => document.querySelectorAll('#sections details').length === 4, null, { timeout: 30000 });
 await panel.waitForFunction(() => document.querySelector('#sections').textContent.includes('哈希表把查找降到'), null, { timeout: 30000 });
 await panel.waitForFunction(() => document.querySelector('#status').textContent.includes('完成'), null, { timeout: 30000 });
