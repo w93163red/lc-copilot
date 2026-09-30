@@ -1,8 +1,8 @@
 import { readProblem, readEditorCode, readRunResult } from './src/page.js';
 import { detectLang } from './src/langs.js';
-import { buildMessages, buildReviewMessages, buildDebugMessages } from './src/prompt.js';
+import { buildMessages, buildChainMessages, parseChain, buildReviewMessages, buildDebugMessages } from './src/prompt.js';
 import { splitSections } from './src/sections.js';
-import { streamChat } from './src/llm.js';
+import { streamChat, completeChat } from './src/llm.js';
 import { loadSettings, validateSettings } from './src/settings.js';
 import { loadHint, saveHint, doneStatus } from './src/hints.js';
 
@@ -28,6 +28,7 @@ const TRACKS = {
   },
 };
 const NO_RESULT = '没有读到运行结果，请先在页面上 Run 或 Submit，或手动粘贴';
+const FALLBACK_INSIGHTS = ['解决暴力解瓶颈的关键观察'];
 const IDLE = { status: 'idle' };
 const pinnedTabId = Number(new URLSearchParams(location.search).get('tabId')) || null;
 const entries = new Map();
@@ -75,7 +76,8 @@ function renderTrack(track, state, problem) {
   track.generate.textContent = status === 'idle' ? track.label : track.relabel;
   track.stop.hidden = status !== 'streaming';
   track.status.className = status === 'error' ? 'status alert-destructive' : 'status';
-  const text = problem ? { idle: '', streaming: track.busy, done: doneStatus({ ...state, problem }), error: state.message }[status] : message;
+  const busyText = state.phase === 'plan' ? '规划中…' : track.busy;
+  const text = problem ? { idle: '', streaming: busyText, done: doneStatus({ ...state, problem }), error: state.message }[status] : message;
   const busy = Boolean(problem) && status === 'streaming';
   if (Boolean(track.status.firstElementChild) !== busy || track.status.textContent !== text) {
     track.status.replaceChildren(...(busy ? [spinner()] : []), text);
@@ -199,8 +201,12 @@ async function run(track, problem, messages) {
   track.controller = new AbortController();
   const { signal } = track.controller;
   let markdown = '';
-  setTrack(slug, track, { status: 'streaming', markdown });
   try {
+    if (typeof messages === 'function') {
+      setTrack(slug, track, { status: 'streaming', markdown, phase: 'plan' });
+      messages = await messages(settings, signal);
+    }
+    setTrack(slug, track, { status: 'streaming', markdown });
     await streamChat(settings, messages, (delta) => {
       markdown += delta;
       setTrack(slug, track, { status: 'streaming', markdown });
@@ -215,7 +221,10 @@ async function run(track, problem, messages) {
 
 async function generate() {
   const { problem } = entry;
-  const markdown = await run(TRACKS.hints, problem, buildMessages(problem));
+  const markdown = await run(TRACKS.hints, problem, async (settings, signal) => {
+    const insights = parseChain(await completeChat(settings, buildChainMessages(problem), signal)) ?? FALLBACK_INSIGHTS;
+    return buildMessages(problem, insights);
+  });
   if (markdown !== null) await saveHint(problem.slug, { markdown, lang: problem.lang });
 }
 

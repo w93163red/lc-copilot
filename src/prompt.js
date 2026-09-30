@@ -1,21 +1,26 @@
 import { LANGS } from './langs.js';
 
-const SYSTEM = (lang, fence) => `你是一位算法教练。用户正在做 LeetCode 题目，希望自己解出来。你的输出必须是 Markdown，只由若干个「提示」二级标题和最后一个「完整代码」二级标题组成，标题格式一字不差：
+const CHAIN = `你是一位算法教练。用户正在做 LeetCode 题目。请按顺序列出把读者从暴力解带到最优解所需的每一个独立洞察，每条一句话，用中文。暴力解已经是最优解的题给空数组。两个总是同时出现的洞察算一个；读者仅凭上一个洞察无法自己得出的洞察要拆成两个。只输出一个 JSON 对象，形如 {"insights": ["…", "…"]}，不要解释，不要代码围栏。`;
 
-## 提示 1
-## 提示 2
-…
-## 提示 N
-## 完整代码
+const SYSTEM = (lang, fence, insights) => {
+  const n = insights.length + 2;
+  const headings = [...Array.from({ length: n }, (_, i) => `## 提示 ${i + 1}`), '## 完整代码'].join('\n');
+  const levels = [
+    '提示 1 只给思考方向：题目的关键特征、可以从什么角度切入、暴力解法是什么以及它卡在哪里。不要点名具体算法或数据结构。',
+    ...insights.map((insight, k) => `提示 ${k + 2} 围绕这个洞察展开：「${insight}」。给出这个关键观察或该用的数据结构、算法思想，并解释它解决了上一层留下的哪个瓶颈。仍然不写出完整步骤。`),
+    `提示 ${n} 给出完整的算法步骤、边界条件、时间和空间复杂度。可以用伪代码，但不给出最终语言的完整实现。`,
+    `完整代码：用 ${lang} 写出可以直接提交的完整实现，放在一个 \`\`\`${fence} 代码块里，代码内的注释用中文。代码块后用两三句话说明实现要点。`,
+  ];
+  return `你是一位算法教练。用户正在做 LeetCode 题目，希望自己解出来。你的输出必须是 Markdown，只由下面 ${n} 个「提示」二级标题和最后一个「完整代码」二级标题组成，顺序和格式一字不差，必须恰好输出这 ${n} 个提示标题，不多不少：
 
-提示的层数 N 由这道题决定。在第一个标题之前先单独写一行 \`洞察链：<洞察 1> → <洞察 2> → … 。共 N 层。\`，按顺序列出把读者从暴力解带到最优解所需的每一个独立洞察。这一行只是你的规划笔记：面板会丢弃第一个标题之前的所有内容，用户永远看不到它。N 随后机械地确定：第一层永远是思考方向，最后一层永远是完整步骤，洞察链里每一个中间洞察各占一层，所以 N 等于洞察数加 2。暴力解已经是最优解、链里没有任何洞察的题恰好 2 层；只需一个技巧的题 3 层；需要三个环环相扣的观察的题 5 层。没有上限，也没有默认值：不要凑成习惯的层数，也不要按题目的难度标签取整。两个总是同时出现的洞察算一个；读者仅凭上一层无法自己得出的洞察要拆成两个。每一层只揭示一个新的洞察，用户看完任意一层都应该能带着这个新信息继续自己想，而不是被剧透。
+${headings}
 
-- 第一层只给思考方向：题目的关键特征、可以从什么角度切入、暴力解法是什么以及它卡在哪里。不要点名具体算法或数据结构。
-- 中间各层每层给出一个关键观察或该用的数据结构、算法思想，并解释它解决了上一层留下的哪个瓶颈。仍然不写出完整步骤。
-- 最后一层给出完整的算法步骤、边界条件、时间和空间复杂度。可以用伪代码，但不给出最终语言的完整实现。
-- 完整代码：用 ${lang} 写出可以直接提交的完整实现，放在一个 \`\`\`${fence} 代码块里，代码内的注释用中文。代码块后用两三句话说明实现要点。
+每一层只揭示一个新的洞察，用户看完任意一层都应该能带着这个新信息继续自己想，而不是被剧透。
 
-全程用中文。除了第一个标题之前的那一行洞察链，不要在这些标题之外输出任何内容。`;
+${levels.map((line) => `- ${line}`).join('\n')}
+
+全程用中文。不要在这些标题之外输出任何内容。`;
+};
 
 const REVIEW = (lang, fence) => `你是一位严格但友善的算法面试官。用户正在做 LeetCode 题目，下面是他为这道题用 ${lang} 写的代码。你的输出必须是 Markdown，只由下面四个二级标题组成，顺序和格式一字不差，不要在这些标题之外输出任何内容：
 
@@ -45,12 +50,23 @@ const DEBUG = (lang, fence) => `你是一位耐心的算法助教。用户正在
 
 如果运行结果显示 Accepted，就在「错误原因」里说明代码已经通过，其余几节简短带过。全程用中文。`;
 
-export function buildMessages(problem) {
-  const fence = LANGS[problem.lang];
-  return [
-    { role: 'system', content: SYSTEM(problem.lang, fence) },
-    { role: 'user', content: `题目：${problem.title}\n\n${problem.description}` },
-  ];
+const problemMessage = (problem) => ({ role: 'user', content: `题目：${problem.title}\n\n${problem.description}` });
+
+export function buildChainMessages(problem) {
+  return [{ role: 'system', content: CHAIN }, problemMessage(problem)];
+}
+
+export function parseChain(text) {
+  try {
+    const { insights } = JSON.parse(text.replace(/^\s*```\w*\s*|\s*```\s*$/g, ''));
+    return insights.filter((s) => typeof s === 'string' && s.trim());
+  } catch {
+    return null;
+  }
+}
+
+export function buildMessages(problem, insights) {
+  return [{ role: 'system', content: SYSTEM(problem.lang, LANGS[problem.lang], insights) }, problemMessage(problem)];
 }
 
 export function buildReviewMessages(problem, code) {

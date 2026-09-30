@@ -42,6 +42,10 @@ const server = http.createServer((req, res) => {
   req.on('end', () => {
     const parsed = JSON.parse(body);
     received.push({ url: req.url, auth: req.headers.authorization, body: parsed });
+    if (parsed.messages[0].content.includes('insights')) {
+      res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ choices: [{ message: { content: '{"insights":["补数只需要查找是否出现过"]}' } }] }));
+    }
     const text = parsed.messages.map((m) => m.content).join('\n');
     const canned = text.includes('运行结果：') ? DEBUG : text.includes('我的代码') ? REVIEW : HINTS;
     res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream' });
@@ -111,12 +115,17 @@ assert.match(code, /## 这一行不是标题/, 'heading-looking line inside fenc
 const rawHtml = await panel.$eval('#sections', (e) => e.innerHTML);
 assert.ok(!rawHtml.includes('<script'), 'no script tags');
 
-assert.equal(received.length, 1);
+assert.equal(received.length, 2, 'generate plans the chain, then streams the hints');
 assert.equal(received[0].url, '/v1/chat/completions');
 assert.equal(received[0].auth, 'Bearer test-key-123');
 assert.equal(received[0].body.model, 'mock-model');
-assert.equal(received[0].body.stream, true);
-const userMsg = received[0].body.messages.map((m) => m.content).join('\n');
+assert.equal(received[0].body.stream, false, 'chain request is not streamed');
+assert.match(received[0].body.messages.at(-1).content, /indices of the two numbers/, 'chain request carries the problem');
+assert.equal(received[1].body.stream, true);
+const hintSystem = received[1].body.messages[0].content;
+assert.match(hintSystem, /## 提示 1\n## 提示 2\n## 提示 3\n## 完整代码/, 'one insight gives three hint levels');
+assert.match(hintSystem, /补数只需要查找是否出现过/, 'hint request names the planned insight');
+const userMsg = received[1].body.messages.map((m) => m.content).join('\n');
 assert.match(userMsg, /Two Sum/);
 assert.match(userMsg, /C\+\+/);
 assert.match(userMsg, /indices of the two numbers/);
@@ -125,11 +134,11 @@ await panel.reload();
 await panel.waitForFunction(() => document.querySelector('#title')?.textContent.includes('Two Sum'), null, { timeout: 30000 });
 await panel.waitForFunction(() => document.querySelectorAll('#sections details').length === 4, null, { timeout: 30000 });
 assert.match(await panel.locator('#status').textContent(), /^已缓存 · /, 'reload shows the cached result');
-assert.equal(received.length, 1, 'cached reload sends no request');
+assert.equal(received.length, 2, 'cached reload sends no request');
 assert.deepEqual(await panel.$$eval('#sections details', (els) => els.map((e) => e.open)), [false, false, false, false], 'all collapsed after reload');
 
 await panel.click('#generate');
-for (let i = 0; received.length < 2; i++) {
+for (let i = 0; received.length < 4; i++) {
   assert.ok(i < 600, 'regenerate sent no request');
   await new Promise((r) => setTimeout(r, 50));
 }
@@ -141,8 +150,8 @@ await panel.waitForFunction(() => document.querySelectorAll('#sections-review de
 await panel.waitForFunction(() => document.querySelector('#status-review').textContent.includes('完成'), null, { timeout: 30000 });
 assert.deepEqual(await panel.$$eval('#sections-review details > summary', (els) => els.map((e) => e.textContent.trim())), ['正确性', '复杂度', '问题', '改进建议']);
 assert.deepEqual(await panel.$$eval('#sections-review details', (els) => els.map((e) => e.open)), [true, true, true, true], 'review sections open by default');
-assert.equal(received.length, 3);
-const reviewUser = received[2].body.messages.at(-1).content;
+assert.equal(received.length, 5);
+const reviewUser = received[4].body.messages.at(-1).content;
 assert.match(reviewUser, /class Solution/, 'review request carries the editor code');
 assert.match(reviewUser, /我的代码（C\+\+）/);
 await panel.click('#sections-review details:nth-of-type(1) > summary');
@@ -161,8 +170,8 @@ await panel.waitForFunction(() => document.querySelectorAll('#sections-debug det
 await panel.waitForFunction(() => document.querySelector('#status-debug').textContent.includes('完成'), null, { timeout: 30000 });
 assert.deepEqual(await panel.$$eval('#sections-debug details > summary', (els) => els.map((e) => e.textContent.trim())), ['错误原因', '出错位置', '修复思路', '修正后的代码']);
 assert.deepEqual(await panel.$$eval('#sections-debug details', (els) => els.map((e) => e.open)), [true, true, true, false], 'explanations open, corrected code collapsed');
-assert.equal(received.length, 4);
-const debugUser = received[3].body.messages.at(-1).content;
+assert.equal(received.length, 6);
+const debugUser = received[5].body.messages.at(-1).content;
 assert.match(debugUser, /Wrong Answer/, 'debug request carries the verdict');
 assert.match(debugUser, /\[0,1\]/, 'debug request carries the expected output');
 assert.match(debugUser, /class Solution/, 'debug request carries the editor code');
@@ -172,7 +181,7 @@ assert.equal(await panel.evaluate(() => document.documentElement.scrollWidth <= 
 await panel.fill('#result-input', '');
 await panel.click('#debug-run');
 await panel.waitForFunction(() => document.querySelector('#status-debug').textContent.includes('没有运行结果'), null, { timeout: 10000 });
-assert.equal(received.length, 4, 'blank result sends no request');
+assert.equal(received.length, 6, 'blank result sends no request');
 
 await panel.click('#tab-hints');
 await panel.screenshot({ path: path.join(OUT, 'leetcode-copilot-panel.png'), fullPage: true, animations: 'disabled' });
@@ -189,7 +198,7 @@ await panel.goto('chrome-extension://' + extId + '/options.html');
 await panel.waitForFunction(() => document.querySelector('#baseUrl')?.value.startsWith('http'), null, { timeout: 10000 });
 await panel.screenshot({ path: path.join(OUT, 'leetcode-copilot-options.png'), fullPage: true, animations: 'disabled' });
 console.log('screenshot:', path.join(OUT, 'leetcode-copilot-options.png'));
-console.log('E2E OK. request:', JSON.stringify({ auth: received[0].auth, model: received[0].body.model, roles: received[0].body.messages.map((m) => m.role) }));
+console.log('E2E OK. request:', JSON.stringify({ auth: received[1].auth, model: received[1].body.model, roles: received[1].body.messages.map((m) => m.role) }));
 await ctx.close();
 server.close();
 fs.rmSync(userDataDir, { recursive: true, force: true });

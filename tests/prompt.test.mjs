@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMessages, buildReviewMessages, buildDebugMessages } from '../src/prompt.js';
+import { buildMessages, buildChainMessages, parseChain, buildReviewMessages, buildDebugMessages } from '../src/prompt.js';
 
 const problem = {
   slug: 'two-sum',
@@ -9,24 +9,60 @@ const problem = {
   lang: 'C++',
 };
 
-test('system message lets the problem decide the hint count and names the language and fence', () => {
-  const [system, user] = buildMessages(problem);
+test('chain messages ask for a JSON insight list and carry the problem', () => {
+  const [system, user] = buildChainMessages(problem);
   assert.equal(system.role, 'system');
-  assert.match(system.content, /## 提示 1\n## 提示 2\n…\n## 提示 N\n## 完整代码/);
-  assert.match(system.content, /洞察链：/);
-  assert.match(system.content, /共 N 层/);
-  assert.doesNotMatch(system.content, /中等题/);
+  assert.match(system.content, /只输出一个 JSON 对象，形如 \{"insights": \["…", "…"\]\}/);
+  assert.equal(user.content, '题目：Two Sum\n\nGiven an array of integers nums and an integer target...');
+});
+
+test('parseChain reads plain JSON', () => {
+  assert.deepEqual(parseChain('{"insights":["补数只需要查找是否出现过","哈希表让查找变成 O(1)"]}'), ['补数只需要查找是否出现过', '哈希表让查找变成 O(1)']);
+});
+
+test('parseChain strips a code fence and drops empty entries', () => {
+  assert.deepEqual(parseChain('```json\n{"insights": ["补数只需要查找是否出现过", "", 3]}\n```'), ['补数只需要查找是否出现过']);
+});
+
+test('parseChain returns an empty list for an empty chain', () => {
+  assert.deepEqual(parseChain('{"insights":[]}'), []);
+});
+
+test('parseChain returns null on garbage or the wrong shape', () => {
+  assert.equal(parseChain('对不起，这道题没有洞察'), null);
+  assert.equal(parseChain('{"hints":["x"]}'), null);
+  assert.equal(parseChain('{"insights":"x"}'), null);
+});
+
+test('two insights give four numbered headings built around the insight text', () => {
+  const [system, user] = buildMessages(problem, ['补数只需要查找是否出现过', '哈希表让查找变成 O(1)']);
+  assert.equal(system.role, 'system');
+  assert.match(system.content, /只由下面 4 个「提示」二级标题/);
+  assert.match(system.content, /必须恰好输出这 4 个提示标题，不多不少：\n\n## 提示 1\n## 提示 2\n## 提示 3\n## 提示 4\n## 完整代码\n/);
+  assert.match(system.content, /- 提示 1 只给思考方向/);
+  assert.match(system.content, /- 提示 2 围绕这个洞察展开：「补数只需要查找是否出现过」/);
+  assert.match(system.content, /- 提示 3 围绕这个洞察展开：「哈希表让查找变成 O\(1\)」/);
+  assert.match(system.content, /- 提示 4 给出完整的算法步骤、边界条件、时间和空间复杂度/);
+  assert.doesNotMatch(system.content, /洞察链|…\n## 提示 N/);
   assert.match(system.content, /用 C\+\+ 写出可以直接提交的完整实现，放在一个 ```cpp 代码块里/);
+  assert.match(system.content, /全程用中文/);
   assert.equal(user.role, 'user');
 });
 
+test('zero insights give exactly two headings', () => {
+  const [system] = buildMessages(problem, []);
+  assert.match(system.content, /必须恰好输出这 2 个提示标题，不多不少：\n\n## 提示 1\n## 提示 2\n## 完整代码\n/);
+  assert.match(system.content, /- 提示 2 给出完整的算法步骤/);
+  assert.doesNotMatch(system.content, /围绕这个洞察展开/);
+});
+
 test('user message carries the title and description', () => {
-  const [, user] = buildMessages(problem);
+  const [, user] = buildMessages(problem, []);
   assert.equal(user.content, '题目：Two Sum\n\nGiven an array of integers nums and an integer target...');
 });
 
 test('a different language changes both the prose and the fence tag', () => {
-  const [system] = buildMessages({ ...problem, lang: 'Go' });
+  const [system] = buildMessages({ ...problem, lang: 'Go' }, []);
   assert.match(system.content, /用 Go 写出.*```golang 代码块/);
 });
 
