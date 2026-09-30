@@ -144,6 +144,30 @@ for (let i = 0; received.length < 4; i++) {
 }
 await panel.waitForFunction(() => document.querySelector('#status').textContent.includes('完成'), null, { timeout: 30000 });
 
+const rebindShown = () => panel.$eval('#rebind', (e) => getComputedStyle(e).display !== 'none');
+const lc2 = await ctx.newPage();
+await lc2.goto('https://leetcode.com/problems/add-two-numbers/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+await lc2.waitForSelector('#editor button', { timeout: 60000 });
+await new Promise((r) => setTimeout(r, 500));
+assert.equal(await panel.locator('#title').textContent(), 'Two Sum', 'panel stays bound while another problem tab is active');
+assert.equal(await rebindShown(), true, 'rebind offered for the active problem tab');
+assert.match(await panel.locator('#rebind').textContent(), /Add Two Numbers/);
+await panel.click('#rebind');
+await panel.waitForFunction(() => document.querySelector('#title').textContent === 'Add Two Numbers', null, { timeout: 30000 });
+assert.equal(await panel.$$eval('#sections details', (els) => els.length), 0, 'rebound problem starts idle');
+await panel.bringToFront();
+await new Promise((r) => setTimeout(r, 500));
+assert.equal(await rebindShown(), false, 'no rebind when the active tab is not a problem page');
+await lc.bringToFront();
+await new Promise((r) => setTimeout(r, 500));
+assert.equal(await rebindShown(), true, 'rebind offered for the original tab');
+assert.match(await panel.locator('#rebind').textContent(), /Two Sum/);
+await panel.click('#rebind');
+await panel.waitForFunction(() => document.querySelector('#title').textContent === 'Two Sum', null, { timeout: 30000 });
+assert.equal(await panel.$$eval('#sections details', (els) => els.length), 4, 'cached sections come back from memory');
+assert.equal(received.length, 4, 'rebinding sends no request');
+await lc2.close();
+
 await panel.click('#tab-review');
 await panel.click('#evaluate');
 await panel.waitForFunction(() => document.querySelectorAll('#sections-review details').length === 4, null, { timeout: 30000 });

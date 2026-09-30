@@ -8,7 +8,7 @@ import { loadHint, saveHint, doneStatus } from './src/hints.js';
 
 const PROBLEM_URL = /^https:\/\/leetcode\.com\/problems\/[^/?#]+/;
 const $ = (id) => document.getElementById(id);
-const el = Object.fromEntries(['title', 'difficulty', 'lang', 'retry', 'settings'].map((id) => [id, $(id)]));
+const el = Object.fromEntries(['title', 'difficulty', 'lang', 'rebind', 'retry', 'settings'].map((id) => [id, $(id)]));
 const TRACKS = {
   hints: {
     key: 'hints',
@@ -30,8 +30,9 @@ const TRACKS = {
 const NO_RESULT = '没有读到运行结果，请先在页面上 Run 或 Submit，或手动粘贴';
 const FALLBACK_INSIGHTS = ['解决暴力解瓶颈的关键观察'];
 const IDLE = { status: 'idle' };
-const pinnedTabId = Number(new URLSearchParams(location.search).get('tabId')) || null;
 const entries = new Map();
+let boundTabId = Number(new URLSearchParams(location.search).get('tabId')) || null;
+let activeTab = null;
 let entry = null;
 let message = '';
 let view = 'hints';
@@ -60,6 +61,7 @@ function render() {
   el.lang.textContent = problem?.lang ?? '';
   el.lang.hidden = !problem;
   el.retry.hidden = Boolean(problem);
+  renderRebind();
   TRACKS.debug.read.hidden = !problem;
   const resultText = entry?.resultText ?? '';
   if (TRACKS.debug.input.value !== resultText) TRACKS.debug.input.value = resultText;
@@ -83,6 +85,12 @@ function renderTrack(track, state, problem) {
     track.status.replaceChildren(...(busy ? [spinner()] : []), text);
   }
   renderSections(track, state.markdown ? splitSections(state.markdown) : []);
+}
+
+function renderRebind() {
+  const target = activeTab && activeTab.id !== boundTabId && PROBLEM_URL.test(activeTab.url ?? '') ? activeTab : null;
+  el.rebind.hidden = !target;
+  if (target) el.rebind.textContent = `当前标签页是「${(target.title ?? '').replace(/\s*-\s*LeetCode\s*$/, '')}」，切换到这一题`;
 }
 
 const spinner = () => Object.assign(document.createElement('span'), { className: 'spinner' });
@@ -124,9 +132,17 @@ function addCopyButton(pre) {
 }
 
 async function currentTab() {
-  if (pinnedTabId) return chrome.tabs.get(pinnedTabId);
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
+  return boundTabId === null ? null : chrome.tabs.get(boundTabId);
+}
+
+async function syncActive() {
+  [activeTab = null] = await chrome.tabs.query({ active: true, currentWindow: true });
+  renderRebind();
+}
+
+function bind(tabId) {
+  boundTabId = tabId ?? null;
+  return refresh();
 }
 
 async function refresh() {
@@ -274,18 +290,22 @@ TRACKS.debug.read.addEventListener('click', readResult);
 TRACKS.debug.input.addEventListener('input', () => {
   if (entry) entry.resultText = TRACKS.debug.input.value;
 });
-el.retry.addEventListener('click', refresh);
+el.rebind.addEventListener('click', () => bind(activeTab?.id));
+el.retry.addEventListener('click', () => bind(boundTabId ?? activeTab?.id));
 el.settings.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
-chrome.tabs.onActivated.addListener(async ({ windowId }) => {
-  if (pinnedTabId) return;
-  const { id } = await chrome.windows.getCurrent();
-  if (windowId === id) refresh();
+chrome.tabs.onActivated.addListener(syncActive);
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (tabId === boundTabId && (info.url || info.status === 'complete')) refresh();
+  syncActive();
 });
-chrome.tabs.onUpdated.addListener(async (tabId, info) => {
-  if (!info.url && info.status !== 'complete') return;
-  const tab = await currentTab().catch(() => null);
-  if (tab?.id === tabId) refresh();
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId !== boundTabId) return;
+  boundTabId = null;
+  showMessage('绑定的标签页已关闭，请打开一道题目后点「绑定当前标签页」');
 });
 
-refresh();
+chrome.tabs.query({ active: true, currentWindow: true }).then(([tab = null]) => {
+  activeTab = tab;
+  bind(boundTabId ?? tab?.id);
+});

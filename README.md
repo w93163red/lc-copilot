@@ -6,7 +6,7 @@ Chrome 侧边栏扩展。打开一道 leetcode.com 题目，点击「生成提�
 
 1. 打开 `chrome://extensions`，右上角开启「开发者模式」。
 2. 点「加载已解压的扩展程序」，选择本仓库目录。
-3. 点击工具栏图标即可在当前窗口打开侧边栏。
+3. 点击工具栏图标即可在当前窗口打开侧边栏。侧边栏绑定打开它时所在的标签页，切到别的标签页不会跟着变；当另一个题目标签页处于前台时，面板顶部会出现「切换到这一题」，点一下就改绑到那一题。
 
 ## 配置
 
@@ -38,7 +38,7 @@ Chrome 侧边栏扩展。打开一道 leetcode.com 题目，点击「生成提�
 
 无构建步骤，纯 ES module。`npm test` 运行 `node --test`，覆盖分段、SSE 解析、提示词、页面读取、设置校验和提示缓存。
 
-端到端验证 `scripts/e2e.mjs`：起一个本地假 OpenAI 流式服务，用 Playwright 以未打包扩展方式启动有头 Chromium，打开真实的 leetcode.com 两数之和页面，在侧边栏页面里点「生成提示」，断言四个折叠区块、代码块内容和发出的请求；再切到「评估」点「评估代码」，断言四个展开的区块和请求里带着编辑器代码；然后在页面里造一个 Wrong Answer 结果，切到「调试」，断言结果框被自动填充、四个区块的展开状态和请求里带着运行结果与代码。需要全局安装的 `@playwright/mcp`（或用 `PLAYWRIGHT_MODULE` 指向一个 playwright 包目录）和一个 Chromium 二进制：
+端到端验证 `scripts/e2e.mjs`：起一个本地假 OpenAI 流式服务，用 Playwright 以未打包扩展方式启动有头 Chromium，打开真实的 leetcode.com 两数之和页面，在侧边栏页面里点「生成提示」，断言四个折叠区块、代码块内容和发出的请求；再切到「评估」点「评估代码」，断言四个展开的区块和请求里带着编辑器代码；然后在页面里造一个 Wrong Answer 结果，切到「调试」，断言结果框被自动填充、四个区块的展开状态和请求里带着运行结果与代码；再打开第二道题的标签页，断言面板仍停在原题并出现「切换到这一题」，点击后来回改绑两题，缓存的区块从内存恢复。需要全局安装的 `@playwright/mcp`（或用 `PLAYWRIGHT_MODULE` 指向一个 playwright 包目录）和一个 Chromium 二进制：
 
 ```sh
 CHROMIUM_PATH="/path/to/Chromium" node scripts/e2e.mjs

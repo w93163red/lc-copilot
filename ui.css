@@ -254,6 +254,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
 .panel .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .panel h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.025em; line-height: 1.4; overflow-wrap: anywhere; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rebind { width: 100%; height: auto; min-height: 36px; padding: 8px 12px; white-space: normal; text-align: left; line-height: 1.4; }
 .panel section { display: flex; flex-direction: column; gap: 12px; }
 
 .options { padding: 32px 16px; }
