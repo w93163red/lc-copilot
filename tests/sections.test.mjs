@@ -46,3 +46,11 @@ test('### headings and indented ## are not section boundaries', () => {
     { title: '提示 1', body: '### 小标题\n  ## 缩进\n正文' },
   ]);
 });
+
+test('an insight-chain line before the first heading is dropped', () => {
+  assert.deepEqual(splitSections('洞察链：a → b。共 3 层。\n\n## 提示 1\n方向。\n## 提示 2\n观察。\n## 提示 3\n步骤。\n'), [
+    { title: '提示 1', body: '方向。' },
+    { title: '提示 2', body: '观察。' },
+    { title: '提示 3', body: '步骤。' },
+  ]);
+});
