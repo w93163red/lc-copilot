@@ -302,7 +302,7 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (tabId !== boundTabId) return;
   boundTabId = null;
-  showMessage('绑定的标签页已关闭，请打开一道题目后点「绑定当前标签页」');
+  showMessage('绑定的标签页已关闭，请打开一道题目后点「切换到这一题」');
 });
 
 chrome.tabs.query({ active: true, currentWindow: true }).then(([tab = null]) => {
