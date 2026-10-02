@@ -22,14 +22,18 @@ ${levels.map((line) => `- ${line}`).join('\n')}
 全程用中文。不要在这些标题之外输出任何内容。`;
 };
 
-const REVIEW = (lang, fence) => `你是一位严格但友善的算法面试官。用户正在做 LeetCode 题目，下面是他为这道题用 ${lang} 写的代码。你的输出必须是 Markdown，只由下面四个二级标题组成，顺序和格式一字不差，不要在这些标题之外输出任何内容：
+const REVIEW = (lang, fence) => `你是一位严格但友善的算法面试官。用户正在做 LeetCode 题目，下面是他为这道题用 ${lang} 写的代码，以及页面上最近一次运行或提交的结果（可能没有）。你的输出必须是 Markdown，只由下面五个二级标题组成，顺序和格式一字不差，不要在这些标题之外输出任何内容：
 
+## 测试追踪
 ## 正确性
 ## 复杂度
 ## 问题
 ## 改进建议
 
-- 正确性：判断代码是否正确。如果不正确，指出哪些用例会失败，并引用代码说明原因。
+判断对错只认证据，优先级是运行结果 > 逐步追踪 > 直觉。绝不能凭直觉或「看起来没问题」断言代码正确。
+
+- 测试追踪：运行结果里有失败用例就用它，否则用题面里的第一个示例。按用户的代码逐行执行这个用例，每一步写出相关变量的值，最后写出实际输出和期望输出的对比。代码无法编译或会抛出异常时，追踪到出错的那一步为止。
+- 正确性：结论必须和测试追踪一致。只要运行结果不是 Accepted（Wrong Answer、Runtime Error、Compile Error、Time Limit Exceeded 等），这一节必须以「不正确」开头，并指出失败的输入和原因；运行结果是 Accepted 时，先说明已通过，再讨论没有测到的边界情况；没有运行结果时，以「未经运行验证」开头，只根据追踪下结论。
 - 复杂度：给出时间和空间复杂度，并说明对这道题是否已经最优。
 - 问题：列出 bug、遗漏的边界情况和代码风格问题，每条都指出对应的行或片段。
 - 改进建议：给出具体的修改，可以附一小段 \`\`\`${fence} 代码块。如果代码已经最优，直接说明。
@@ -69,11 +73,12 @@ export function buildMessages(problem, insights) {
   return [{ role: 'system', content: SYSTEM(problem.lang, LANGS[problem.lang], insights) }, problemMessage(problem)];
 }
 
-export function buildReviewMessages(problem, code) {
+export function buildReviewMessages(problem, code, result) {
   const fence = LANGS[problem.lang];
+  const evidence = result ? `运行结果：\n\`\`\`\n${result}\n\`\`\`` : '运行结果：无（用户尚未运行或提交）';
   return [
     { role: 'system', content: REVIEW(problem.lang, fence) },
-    { role: 'user', content: `题目：${problem.title}\n\n${problem.description}\n\n我的代码（${problem.lang}）：\n\`\`\`${fence}\n${code}\n\`\`\`` },
+    { role: 'user', content: `题目：${problem.title}\n\n${problem.description}\n\n我的代码（${problem.lang}）：\n\`\`\`${fence}\n${code}\n\`\`\`\n\n${evidence}` },
   ];
 }
 

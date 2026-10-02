@@ -14,17 +14,20 @@ const TRACKS = {
     key: 'hints',
     tab: $('tab-hints'), panel: $('hints'), generate: $('generate'), stop: $('stop'), status: $('status'), sections: $('sections'),
     label: '生成提示', relabel: '重新生成', busy: '生成中…', defaultOpen: false, toggled: new Set(), controller: null,
+    doneText: (state, problem) => doneStatus({ ...state, problem }),
   },
   review: {
     key: 'review',
     tab: $('tab-review'), panel: $('review'), generate: $('evaluate'), stop: $('stop-review'), status: $('status-review'), sections: $('sections-review'),
     label: '评估代码', relabel: '重新评估', busy: '评估中…', defaultOpen: true, toggled: new Set(), controller: null,
+    doneText: ({ evidence }) => (evidence ? '完成 · 已参考运行结果' : '完成 · 未读到运行结果，判断仅基于代码追踪'),
   },
   debug: {
     key: 'debug',
     tab: $('tab-debug'), panel: $('debug'), generate: $('debug-run'), stop: $('stop-debug'), status: $('status-debug'), sections: $('sections-debug'),
     read: $('read-result'), input: $('result-input'),
     label: '找错', relabel: '重新找错', busy: '分析中…', defaultOpen: (title) => title !== '修正后的代码', toggled: new Set(), controller: null,
+    doneText: () => '完成',
   },
 };
 const NO_RESULT = '没有读到运行结果，请先在页面上 Run 或 Submit，或手动粘贴';
@@ -79,7 +82,7 @@ function renderTrack(track, state, problem) {
   track.stop.hidden = status !== 'streaming';
   track.status.className = status === 'error' ? 'status alert-destructive' : 'status';
   const busyText = state.phase === 'plan' ? '规划中…' : track.busy;
-  const text = problem ? { idle: '', streaming: busyText, done: doneStatus({ ...state, problem }), error: state.message }[status] : message;
+  const text = problem ? { idle: '', streaming: busyText, done: track.doneText(state, problem), error: state.message }[status] : message;
   const busy = Boolean(problem) && status === 'streaming';
   if (Boolean(track.status.firstElementChild) !== busy || track.status.textContent !== text) {
     track.status.replaceChildren(...(busy ? [spinner()] : []), text);
@@ -184,16 +187,19 @@ function autoReadResult() {
   if (entry && !entry.resultText.trim()) readResult();
 }
 
-async function readResult() {
-  const current = entry;
-  let text;
+async function pageResult() {
   try {
     const tab = await currentTab();
-    [{ result: text }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readRunResult });
+    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readRunResult });
+    return result || '';
   } catch {
-    text = '';
+    return '';
   }
-  current.resultText = text || '';
+}
+
+async function readResult() {
+  const current = entry;
+  current.resultText = await pageResult();
   const { slug } = current.problem;
   if (!current.resultText) setTrack(slug, TRACKS.debug, { status: 'error', message: NO_RESULT });
   else if (current.debug.status === 'error') setTrack(slug, TRACKS.debug, IDLE);
@@ -205,12 +211,12 @@ async function storedState(slug) {
   return hint && { status: 'done', markdown: hint.markdown, cached: { lang: hint.lang, savedAt: hint.savedAt } };
 }
 
-async function run(track, problem, messages) {
-  const { slug } = problem;
+async function run(track, problem, messages, extra = {}) {
+  const set = (state) => setTrack(problem.slug, track, { ...extra, ...state });
   const settings = await loadSettings();
   const invalid = validateSettings(settings);
   if (invalid) {
-    setTrack(slug, track, { status: 'error', message: `${invalid}，请先在设置中填写。` });
+    set({ status: 'error', message: `${invalid}，请先在设置中填写。` });
     return null;
   }
   track.controller?.abort();
@@ -219,19 +225,19 @@ async function run(track, problem, messages) {
   let markdown = '';
   try {
     if (typeof messages === 'function') {
-      setTrack(slug, track, { status: 'streaming', markdown, phase: 'plan' });
+      set({ status: 'streaming', markdown, phase: 'plan' });
       messages = await messages(settings, signal);
     }
-    setTrack(slug, track, { status: 'streaming', markdown });
+    set({ status: 'streaming', markdown });
     await streamChat(settings, messages, (delta) => {
       markdown += delta;
-      setTrack(slug, track, { status: 'streaming', markdown });
+      set({ status: 'streaming', markdown });
     }, signal);
   } catch (err) {
-    setTrack(slug, track, signal.aborted ? { status: 'done', markdown } : { status: 'error', markdown, message: `生成失败：${err.message}` });
+    set(signal.aborted ? { status: 'done', markdown } : { status: 'error', markdown, message: `生成失败：${err.message}` });
     return null;
   }
-  setTrack(slug, track, { status: 'done', markdown });
+  set({ status: 'done', markdown });
   return markdown;
 }
 
@@ -259,9 +265,13 @@ async function editorCode(track, slug) {
 }
 
 async function evaluate() {
-  const { problem } = entry;
+  const current = entry;
+  const { problem } = current;
   const code = await editorCode(TRACKS.review, problem.slug);
-  if (code !== null) await run(TRACKS.review, problem, buildReviewMessages(problem, code));
+  if (code === null) return;
+  const result = current.resultText.trim() ? current.resultText : await pageResult();
+  if (!current.resultText.trim()) current.resultText = result;
+  await run(TRACKS.review, problem, buildReviewMessages(problem, code, result), { evidence: Boolean(result) });
 }
 
 async function debug() {

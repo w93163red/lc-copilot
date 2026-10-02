@@ -20,7 +20,8 @@ const HINTS = [
 ];
 
 const REVIEW = [
-  '## 正确性\n\n正确。哈希表一次遍历能覆盖所有用例，包括重复元素如 [3,3]。\n\n',
+  '## 测试追踪\n\n用运行结果里的失败用例 nums = [3,3]，target = 6：\n\n- i = 0：查 target - 3 = 3，seen 为空，未命中，seen = {3: 0}\n- i = 1：查 3，命中下标 0，但 if 条件写反，跳过返回，seen = {3: 1}\n- 循环结束，返回 []\n\n实际输出 []，期望 [0,1]。\n\n',
+  '## 正确性\n\n不正确。页面上的运行结果是 Wrong Answer，输入 nums = [3,3]，target = 6 时输出了 []，期望 [0,1]：提交的版本在查表前就把当前数写进了表。\n\n',
   '## 复杂度\n\n时间 O(n)，空间 O(n)。对这道题已经最优。\n\n',
   '## 问题\n\n- `nums.size()` 是 size_t，与 int i 比较会有符号警告。\n- 找不到答案时返回空 vector，题目保证有解，可以接受。\n\n',
   '## 改进建议\n\n循环变量改成 size_t：\n\n```cpp\nfor (size_t i = 0; i < nums.size(); ++i) {\n```\n\n其余已经最优。\n',
@@ -46,8 +47,8 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ choices: [{ message: { content: '{"insights":["补数只需要查找是否出现过"]}' } }] }));
     }
-    const text = parsed.messages.map((m) => m.content).join('\n');
-    const canned = text.includes('运行结果：') ? DEBUG : text.includes('我的代码') ? REVIEW : HINTS;
+    const system = parsed.messages[0].content;
+    const canned = system.includes('## 错误原因') ? DEBUG : system.includes('## 测试追踪') ? REVIEW : HINTS;
     res.writeHead(200, { ...cors, 'Content-Type': 'text/event-stream' });
     let i = 0;
     const tick = () => {
@@ -168,27 +169,31 @@ assert.equal(await panel.$$eval('#sections details', (els) => els.length), 4, 'c
 assert.equal(received.length, 4, 'rebinding sends no request');
 await lc2.close();
 
-await panel.click('#tab-review');
-await panel.click('#evaluate');
-await panel.waitForFunction(() => document.querySelectorAll('#sections-review details').length === 4, null, { timeout: 30000 });
-await panel.waitForFunction(() => document.querySelector('#status-review').textContent.includes('完成'), null, { timeout: 30000 });
-assert.deepEqual(await panel.$$eval('#sections-review details > summary', (els) => els.map((e) => e.textContent.trim())), ['正确性', '复杂度', '问题', '改进建议']);
-assert.deepEqual(await panel.$$eval('#sections-review details', (els) => els.map((e) => e.open)), [true, true, true, true], 'review sections open by default');
-assert.equal(received.length, 5);
-const reviewUser = received[4].body.messages.at(-1).content;
-assert.match(reviewUser, /class Solution/, 'review request carries the editor code');
-assert.match(reviewUser, /我的代码（C\+\+）/);
-await panel.click('#sections-review details:nth-of-type(1) > summary');
-assert.equal(await panel.$eval('#sections-review details:nth-of-type(1)', (e) => e.open), false, 'closed review section stays closed');
-
 await lc.evaluate(() => {
   const tab = document.querySelector('.flexlayout__tab[data-layout-path="/c1/ts1/t1"]');
   tab.innerHTML = '<div><span data-e2e-locator="console-result">Wrong Answer</span></div><div>Input</div><pre>nums = [3,3]\ntarget = 6</pre><div>Output</div><pre>[]</pre><div>Expected</div><pre>[0,1]</pre>';
   tab.style.display = 'block';
 });
+await panel.click('#tab-review');
+await panel.click('#evaluate');
+await panel.waitForFunction(() => document.querySelectorAll('#sections-review details').length === 5, null, { timeout: 30000 });
+await panel.waitForFunction(() => document.querySelector('#status-review').textContent.includes('完成'), null, { timeout: 30000 });
+assert.match(await panel.locator('#status-review').textContent(), /已参考运行结果/, 'review status says the run result was used');
+assert.deepEqual(await panel.$$eval('#sections-review details > summary', (els) => els.map((e) => e.textContent.trim())), ['测试追踪', '正确性', '复杂度', '问题', '改进建议']);
+assert.deepEqual(await panel.$$eval('#sections-review details', (els) => els.map((e) => e.open)), [true, true, true, true, true], 'review sections open by default');
+assert.equal(received.length, 5);
+const reviewUser = received[4].body.messages.at(-1).content;
+assert.match(reviewUser, /class Solution/, 'review request carries the editor code');
+assert.match(reviewUser, /我的代码（C\+\+）/);
+assert.match(reviewUser, /运行结果：/, 'review request carries the run result block');
+assert.match(reviewUser, /Wrong Answer/, 'review request carries the verdict');
+assert.match(reviewUser, /\[0,1\]/, 'review request carries the expected output');
+await panel.click('#sections-review details:nth-of-type(1) > summary');
+assert.equal(await panel.$eval('#sections-review details:nth-of-type(1)', (e) => e.open), false, 'closed review section stays closed');
+
+assert.match(await panel.inputValue('#result-input'), /Wrong Answer/, 'review shares the run result with the debug tab before it is opened');
 await panel.click('#tab-debug');
-await panel.waitForFunction(() => document.querySelector('#result-input').value.includes('Wrong Answer'), null, { timeout: 30000 });
-assert.match(await panel.inputValue('#result-input'), /\[0,1\]/, 'auto-read result carries the expected output');
+assert.match(await panel.inputValue('#result-input'), /\[0,1\]/, 'shared result carries the expected output');
 await panel.click('#debug-run');
 await panel.waitForFunction(() => document.querySelectorAll('#sections-debug details').length === 4, null, { timeout: 30000 });
 await panel.waitForFunction(() => document.querySelector('#status-debug').textContent.includes('完成'), null, { timeout: 30000 });
