@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readEditorCode, readRunResult } from '../src/page.js';
+import { readProblem, readEditorCode, readRunResult } from '../src/page.js';
 
 const model = (lang, value) => ({ getLanguageId: () => lang, getValue: () => value });
 
@@ -47,4 +47,46 @@ test('returns empty when nothing matches or the DOM throws', () => {
   assert.equal(readRunResult(), '');
   globalThis.document = { querySelector: () => { throw new Error('boom'); }, querySelectorAll: () => [] };
   assert.equal(readRunResult(), '');
+});
+
+const link = (href, textContent) => ({ href, textContent });
+const problemPage = (href, { anchors = [], description = null, badge = null, buttons = [] } = {}) => {
+  globalThis.location = { href };
+  globalThis.XPathResult = { FIRST_ORDERED_NODE_TYPE: 9 };
+  globalThis.document = {
+    querySelector: (selector) => (selector === '[data-track-load="description_content"]' ? description : null),
+    querySelectorAll: (selector) => {
+      const prefix = /^a\[href\^="([^"]*)"\]$/.exec(selector);
+      if (prefix) return anchors.filter((a) => a.href.startsWith(prefix[1]));
+      return selector === '#editor button' ? buttons : [];
+    },
+    evaluate: () => ({ singleNodeValue: badge }),
+  };
+};
+
+test('reads the problem from the numbered heading link once the new page is in the DOM', () => {
+  problemPage('https://leetcode.com/problems/two-sum/?envType=daily', {
+    anchors: [link('/problems/two-sum-ii-input-array-is-sorted/', 'Two Sum II - Input Array Is Sorted'), link('/problems/two-sum/', ' 1. Two Sum ')],
+    description: { innerText: 'Given an array of integers nums' },
+    badge: { textContent: ' Easy ' },
+    buttons: [{ textContent: 'C++ ' }, { textContent: 'Auto' }],
+  });
+  assert.deepEqual(readProblem(), {
+    slug: 'two-sum', hydrated: true, title: 'Two Sum', description: 'Given an array of integers nums', difficulty: 'Easy', editorButtons: ['C++', 'Auto'],
+  });
+});
+
+test('reports the new slug as not hydrated while the DOM still belongs to the previous problem', () => {
+  const previous = [link('/problems/two-sum/', '1. Two Sum'), link('/problems/add-two-numbers', '')];
+  problemPage('https://leetcode.com/problems/add-two-numbers/', { anchors: previous, description: { innerText: 'Given an array' } });
+  assert.deepEqual(readProblem(), { slug: 'add-two-numbers', hydrated: false });
+  problemPage('https://leetcode.com/problems/add-two-numbers/', { anchors: [link('/problems/add-two-numbers/', '2. Add Two Numbers')] });
+  assert.deepEqual(readProblem(), { slug: 'add-two-numbers', hydrated: false });
+  problemPage('https://leetcode.com/problems/add-two-numbers/', { anchors: [link('/problems/add-two-numbers-ii/', 'Add Two Numbers II')], description: { innerText: 'x' } });
+  assert.deepEqual(readProblem(), { slug: 'add-two-numbers', hydrated: false });
+});
+
+test('returns null off a problem page', () => {
+  problemPage('https://leetcode.com/problemset/');
+  assert.equal(readProblem(), null);
 });

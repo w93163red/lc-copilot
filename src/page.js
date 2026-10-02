@@ -1,16 +1,20 @@
 export function readProblem() {
   const match = /^https:\/\/leetcode\.com\/problems\/([^/?#]+)/.exec(location.href);
   if (!match) return null;
+  const slug = match[1];
+  const heading = Array.from(document.querySelectorAll(`a[href^="/problems/${slug}"]`)).find((a) => /^\d+\.\s+/.test(a.textContent.trim()));
   const description = document.querySelector('[data-track-load="description_content"]');
+  if (!heading || !description) return { slug, hydrated: false };
   const editorButtons = Array.from(document.querySelectorAll('#editor button'), (b) => b.textContent.trim());
   const badge = document.evaluate(
     "//div[normalize-space(.)='Easy' or normalize-space(.)='Medium' or normalize-space(.)='Hard']",
     document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null,
   ).singleNodeValue;
   return {
-    slug: match[1],
-    title: document.title.replace(/\s*-\s*LeetCode\s*$/, ''),
-    description: description ? description.innerText : '',
+    slug,
+    hydrated: true,
+    title: heading.textContent.trim().replace(/^\d+\.\s+/, ''),
+    description: description.innerText,
     difficulty: badge ? badge.textContent.trim() : '',
     editorButtons,
   };

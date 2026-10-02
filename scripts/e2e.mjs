@@ -169,6 +169,24 @@ assert.equal(await panel.$$eval('#sections details', (els) => els.length), 4, 'c
 assert.equal(received.length, 4, 'rebinding sends no request');
 await lc2.close();
 
+const navLink = (pattern) => lc.waitForFunction((src) => [...document.querySelectorAll('a[href^="/problems/"]')].some((a) => new RegExp(src).test(a.href)), pattern, { timeout: 30000 });
+await navLink('add-two-numbers');
+await lc.evaluate(() => {
+  window.__spa = 1;
+  [...document.querySelectorAll('a[href^="/problems/"]')].find((a) => /add-two-numbers/.test(a.href)).click();
+});
+await panel.waitForFunction(() => document.querySelector('#title').textContent === 'Add Two Numbers', null, { timeout: 10000 });
+assert.equal(await lc.evaluate(() => window.__spa), 1, 'next-problem link navigates client-side');
+assert.equal(await panel.$$eval('#sections details', (els) => els.length), 0, 'navigated problem starts idle');
+assert.equal(await panel.locator('#status').textContent(), '', 'navigated problem has an empty status');
+const backLink = await navLink('/problems/two-sum/?$').then(() => true, () => false);
+if (backLink) await lc.evaluate(() => [...document.querySelectorAll('a[href^="/problems/"]')].find((a) => /\/problems\/two-sum\/?$/.test(a.href)).click());
+else await lc.goBack();
+console.log('back to Two Sum via', backLink ? 'link' : 'goBack');
+await panel.waitForFunction(() => document.querySelector('#title').textContent === 'Two Sum', null, { timeout: 10000 });
+await panel.waitForFunction(() => document.querySelectorAll('#sections details').length === 4, null, { timeout: 10000 });
+assert.equal(received.length, 4, 'in-tab navigation sends no request');
+
 await lc.evaluate(() => {
   const tab = document.querySelector('.flexlayout__tab[data-layout-path="/c1/ts1/t1"]');
   tab.innerHTML = '<div><span data-e2e-locator="console-result">Wrong Answer</span></div><div>Input</div><pre>nums = [3,3]\ntarget = 6</pre><div>Output</div><pre>[]</pre><div>Expected</div><pre>[0,1]</pre>';

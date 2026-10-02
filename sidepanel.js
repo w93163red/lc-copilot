@@ -39,11 +39,13 @@ let activeTab = null;
 let entry = null;
 let message = '';
 let view = 'hints';
+let refreshToken = 0;
 
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 marked.use({ renderer: { html: (token) => escapeHtml(token.text) } });
 
 function showMessage(text) {
+  refreshToken++;
   entry = null;
   message = text;
   render();
@@ -149,27 +151,26 @@ function bind(tabId) {
 }
 
 async function refresh() {
+  const token = ++refreshToken;
+  const stale = () => token !== refreshToken;
   let tab;
   try {
     tab = await currentTab();
   } catch {
     tab = null;
   }
+  if (stale()) return;
   if (!tab || !PROBLEM_URL.test(tab.url ?? '')) {
     showMessage('当前标签页不是 LeetCode 题目页面，请打开 https://leetcode.com/problems/… 后重试。');
     return;
   }
-  let raw;
-  try {
-    [{ result: raw }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readProblem });
-  } catch {
-    raw = null;
-  }
-  if (!raw || !raw.description) {
+  const raw = await hydratedProblem(tab.id, stale);
+  if (stale()) return;
+  if (!raw) {
     showMessage('题目页面还没加载完成，请等页面加载后点击“重新读取”。');
     return;
   }
-  const { editorButtons, ...rest } = raw;
+  const { editorButtons, hydrated, ...rest } = raw;
   const problem = { ...rest, lang: detectLang(editorButtons) };
   const previous = entry;
   let found = entries.get(problem.slug);
@@ -177,10 +178,25 @@ async function refresh() {
     found = { problem, hints: (await storedState(problem.slug)) ?? IDLE, review: IDLE, debug: IDLE, resultText: '' };
     entries.set(problem.slug, found);
   }
+  if (stale()) return;
   found.problem = problem;
   entry = found;
   render();
   if (view === 'debug' && found !== previous) autoReadResult();
+}
+
+async function hydratedProblem(tabId, stale) {
+  const deadline = Date.now() + 10000;
+  while (!stale()) {
+    let raw = null;
+    try {
+      [{ result: raw }] = await chrome.scripting.executeScript({ target: { tabId }, func: readProblem });
+    } catch {}
+    if (raw?.hydrated) return raw;
+    if (Date.now() >= deadline) return null;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return null;
 }
 
 function autoReadResult() {
